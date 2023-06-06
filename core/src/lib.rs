@@ -143,16 +143,18 @@ pub fn score_runs(
     let num_categories = tests_by_category.len();
     let mut categories = Vec::with_capacity(num_categories);
     let mut test_count_by_category = Vec::with_capacity(num_categories);
+    let mut test_scores_by_category = Vec::with_capacity(num_categories);
 
     let mut categories_by_test = BTreeMap::new();
 
     let mut scores_by_category = BTreeMap::new();
     let mut interop_by_category = BTreeMap::new();
-    let mut test_scores_by_category = Vec::with_capacity(num_categories);
 
     for (cat_idx, (category, tests)) in tests_by_category.iter().enumerate() {
         categories.push(category);
-        test_count_by_category.insert(cat_idx, tests.len());
+        test_count_by_category.push(tests.len());
+        test_scores_by_category.push(BTreeMap::new());
+
         for test_id in tests {
             categories_by_test
                 .entry(test_id.as_ref())
@@ -161,14 +163,13 @@ pub fn score_runs(
         }
         scores_by_category.insert(category.clone(), Vec::with_capacity(runs.len()));
         interop_by_category.insert(category.clone(), 0);
-        test_scores_by_category.push(BTreeMap::new())
     }
 
     for run in runs {
         let run_score = score_run(
             run.iter()
                 .map(|(test_id, results)| (test_id.as_ref(), results)),
-            tests_by_category.len(),
+            num_categories,
             &categories_by_test,
             expected_not_ok,
             &mut test_scores_by_category,
