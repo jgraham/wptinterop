@@ -11,7 +11,8 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 install_requires = [
-  "requests"
+  "requests",
+  "tcfetch"
 ]
 
 [project.scripts]

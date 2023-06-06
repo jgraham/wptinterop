@@ -5,7 +5,7 @@ import tempfile
 from collections import defaultdict
 from typing import Any, Mapping
 
-import fetchlogs
+import tcfetch
 import requests
 
 from . import _wpt_interop
