@@ -1,5 +1,5 @@
 [package]
-name = "py-interop-score"
+name = "py-wpt-interop-score"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,5 +9,5 @@ name = "interop_score"
 crate-type = ["cdylib"]
 
 [dependencies]
-interop-score = { path = "../core" }
+wpt-interop-score = { path = "../core" }
 pyo3 = "0.18.3"

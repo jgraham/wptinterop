@@ -1,5 +1,5 @@
 [package]
-name = "interop-score"
+name = "wpt-interop-score"
 version = "0.1.0"
 edition = "2021"
 
