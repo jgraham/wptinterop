@@ -22,16 +22,16 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def print_scores(runs, results):
+def print_scores(runs, results_by_category):
     tab = "\t" # For f-string
     header = "\t".join(f"{repo}:{commit}" for repo, commit in runs)
     print(f"\t{header}")
     totals = [0] * len(runs)
-    for category, category_results in results.items():
+    for category, category_results in results_by_category.items():
         for i, result in enumerate(category_results):
             totals[i] += result
         print(f"{category}\t{tab.join(str(item) for item in category_results)}")
-    totals = [math.floor(float(item) / results(runs)) for item in totals]
+    totals = [math.floor(float(item) / len(results_by_category)) for item in totals]
     print(f"Total\t{tab.join(str(item) for item in totals)}")
 
 

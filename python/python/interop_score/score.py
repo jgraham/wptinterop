@@ -86,8 +86,6 @@ def score_taskcluster_runs(runs, task_filters, year=2023, log_dir=None):
     for branch, commit in runs:
         run_results.append(load_taskcluster_results(branch, commit, task_filters, log_dir))
 
-    interop_scores = {}
-    for category, tests in tests_by_category.items():
-        interop_scores[category] = _interop_score.score_runs(run_results, tests, set())
+    run_scores, _ = _interop_score.score_runs(run_results, tests_by_category, set())
 
-    return interop_scores
+    return run_scores

@@ -40,12 +40,15 @@ impl From<&SubtestResult> for interop::SubtestResult {
     }
 }
 
+type RunScores = BTreeMap<String, Vec<u64>>;
+type InteropScore = BTreeMap<String, u64>;
+
 #[pyfunction]
 fn score_runs(
     runs: Vec<BTreeMap<String, Results>>,
-    tests: BTreeSet<String>,
+    tests: BTreeMap<String, BTreeSet<String>>,
     expected_not_ok: BTreeSet<String>,
-) -> PyResult<Vec<u64>> {
+) -> PyResult<(RunScores, InteropScore)> {
     // This is a (second?) copy of all the input data
     let mut interop_runs: Vec<BTreeMap<String, interop::Results>> = Vec::with_capacity(runs.len());
     for run in runs.iter() {
