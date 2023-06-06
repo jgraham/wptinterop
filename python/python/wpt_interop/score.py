@@ -8,7 +8,7 @@ from typing import Any, Mapping
 import fetchlogs
 import requests
 
-from . import _interop_score
+from . import _wpt_interop
 
 CATEGORY_URL = "https://raw.githubusercontent.com/web-platform-tests/results-analysis/main/interop-scoring/category-data.json"
 METADATA_URL = "https://wpt.fyi/api/metadata?includeTestLevel=true&product=chrome"
@@ -86,6 +86,6 @@ def score_taskcluster_runs(runs, task_filters, year=2023, log_dir=None):
     for branch, commit in runs:
         run_results.append(load_taskcluster_results(branch, commit, task_filters, log_dir))
 
-    run_scores, _ = _interop_score.score_runs(run_results, tests_by_category, set())
+    run_scores, _ = _wpt_interop.interop_score(run_results, tests_by_category, set())
 
     return run_scores

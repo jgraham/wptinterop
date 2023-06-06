@@ -1,13 +1,13 @@
 [package]
-name = "py-wpt-interop-score"
+name = "py-wpt-interop"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "interop_score"
+name = "py_wpt_interop"
 crate-type = ["cdylib"]
 
 [dependencies]
-wpt-interop-score = { path = "../core" }
+wpt-interop = { path = "../core" }
 pyo3 = "0.18.3"

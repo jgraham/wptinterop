@@ -1,4 +1,4 @@
-extern crate interop_score as interop;
+extern crate wpt_interop as interop;
 use pyo3::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -44,7 +44,7 @@ type RunScores = BTreeMap<String, Vec<u64>>;
 type InteropScore = BTreeMap<String, u64>;
 
 #[pyfunction]
-fn score_runs(
+fn interop_score(
     runs: Vec<BTreeMap<String, Results>>,
     tests: BTreeMap<String, BTreeSet<String>>,
     expected_not_ok: BTreeSet<String>,
@@ -62,8 +62,8 @@ fn score_runs(
 }
 
 #[pymodule]
-#[pyo3(name = "_interop_score")]
-fn _interop_score(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(score_runs, m)?)?;
+#[pyo3(name = "_wpt_interop")]
+fn _wpt_interop(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(interop_score, m)?)?;
     Ok(())
 }
