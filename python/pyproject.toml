@@ -16,12 +16,8 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 install_requires = [
-  "requests",
-  "tcfetch"
+  "requests"
 ]
-
-[project.scripts]
-interop-score = "wpt_interop:command_line.main"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
