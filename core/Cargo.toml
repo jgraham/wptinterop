@@ -5,9 +5,7 @@ edition = "2021"
 authors = ["James Graham <james@hoppipolla.co.uk>"]
 description="web-platform-tests Interop helpers"
 readme = "README.md"
-edition = "2021"
 license = "BSD-3-Clause"
-
 
 [lib]
 name = "wpt_interop"
