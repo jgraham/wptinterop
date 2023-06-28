@@ -9,11 +9,16 @@ import requests
 from . import _wpt_interop  # type: ignore
 
 CATEGORY_URL = "https://raw.githubusercontent.com/web-platform-tests/results-analysis/main/interop-scoring/category-data.json"
+INTEROP_DATA_URL = "https://wpt.fyi/static/interop-data.json"
 METADATA_URL = "https://wpt.fyi/api/metadata?includeTestLevel=true&product=chrome"
 
 
 def fetch_category_data() -> Mapping[str, Mapping[str, Any]]:
     return requests.get(CATEGORY_URL).json()
+
+
+def fetch_interop_data() -> Mapping[str, Mapping[str, Any]]:
+    return requests.get(INTEROP_DATA_URL).json()
 
 
 def fetch_labelled_tests() -> Mapping[str, set]:
@@ -35,6 +40,17 @@ def is_gzip(path):
             return f.read(2) == b"\x1f\x8b"
     except Exception:
         return False
+
+
+def categories_for_year(year: int,
+                        category_data: Mapping[str, Mapping[str, Any]],
+                        interop_data: Mapping[str, Mapping[str, Any]]) -> List[Mapping[str, Any]]:
+    year_key = str(year)
+    if year_key not in category_data or year_key not in interop_data:
+        raise ValueError(f"Invalid year {year}")
+    all_categories = category_data[year_key]["categories"]
+    year_categories = {key for key, value in interop_data[year_key]["focus_areas"].items() if value["countsTowardScore"]}
+    return [item for item in all_categories if item["name"] in year_categories]
 
 
 def load_wptreport(path: str) -> Mapping[str, Any]:
@@ -85,8 +101,11 @@ def score_wptreports(
     :param:
 
     """
-    categories = fetch_category_data()[str(year)]["categories"]
+    category_data = fetch_category_data()
+    interop_data = fetch_interop_data()
     labelled_tests = fetch_labelled_tests()
+
+    categories = categories_for_year(year, category_data, interop_data)
 
     tests_by_category = {}
     all_tests = set()
