@@ -11,3 +11,4 @@ crate-type = ["cdylib"]
 [dependencies]
 wpt-interop = { path = "../core" }
 pyo3 = "0.18.3"
+serde_json = "1"

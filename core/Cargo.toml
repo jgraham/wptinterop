@@ -9,3 +9,11 @@ license = "BSD-3-Clause"
 
 [lib]
 name = "wpt_interop"
+
+[dependencies]
+git2 = "0.17"
+serde = "1"
+serde_json = "1"
+serde_derive = "1"
+thiserror = "1"
+urlencoding = "2"

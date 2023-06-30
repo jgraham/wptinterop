@@ -1,32 +1,136 @@
+pub mod results_cache;
+
+use serde_derive::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::default::Default;
+use std::fmt::Display;
+use thiserror::Error;
 
-#[derive(Debug)]
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error(transparent)]
+    Git(#[from] git2::Error),
+    #[error(transparent)]
+    Serde(#[from] serde_json::Error),
+    #[error("{0}")]
+    String(String),
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Results {
-    pub status: Status,
+    pub status: TestStatus,
+    #[serde(default)]
     pub subtests: Vec<SubtestResult>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub struct SubtestResult {
-    pub id: String,
-    pub status: Status,
+    pub name: String,
+    pub status: SubtestStatus,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Status {
-    Ok,
+#[derive(Deserialize, PartialEq, Eq, Clone, Debug, Copy, Hash)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TestStatus {
     Pass,
-    Other,
+    Fail,
+    Ok,
+    Error,
+    Timeout,
+    Crash,
+    Assert,
+    PreconditionFailed,
+    Skip,
 }
 
-impl From<&str> for Status {
-    fn from(value: &str) -> Self {
+impl TryFrom<&str> for TestStatus {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<TestStatus> {
         match value {
-            "PASS" => Status::Pass,
-            "OK" => Status::Ok,
-            _ => Status::Other,
+            "PASS" => Ok(TestStatus::Pass),
+            "FAIL" => Ok(TestStatus::Fail),
+            "OK" => Ok(TestStatus::Ok),
+            "ERROR" => Ok(TestStatus::Error),
+            "TIMEOUT" => Ok(TestStatus::Timeout),
+            "CRASH" => Ok(TestStatus::Crash),
+            "ASSERT" => Ok(TestStatus::Assert),
+            "PRECONDITION_FAILED" => Ok(TestStatus::PreconditionFailed),
+            "SKIP" => Ok(TestStatus::Skip),
+            x => Err(Error::String(format!("Unrecognised test status {}", x))),
         }
+    }
+}
+
+impl Display for TestStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                TestStatus::Pass => "PASS",
+                TestStatus::Fail => "FAIL",
+                TestStatus::Ok => "OK",
+                TestStatus::Error => "ERROR",
+                TestStatus::Timeout => "TIMEOUT",
+                TestStatus::Crash => "CRASH",
+                TestStatus::Assert => "ASSERT",
+                TestStatus::PreconditionFailed => "PRECONDITION_FAILED",
+                TestStatus::Skip => "SKIP",
+            }
+        )
+    }
+}
+
+#[derive(Deserialize, PartialEq, Eq, Clone, Debug, Copy, Hash)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SubtestStatus {
+    Pass,
+    Fail,
+    Error,
+    Timeout,
+    Assert,
+    PreconditionFailed,
+    Notrun,
+    Skip,
+}
+
+impl TryFrom<&str> for SubtestStatus {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<SubtestStatus> {
+        match value {
+            "PASS" => Ok(SubtestStatus::Pass),
+            "FAIL" => Ok(SubtestStatus::Fail),
+            "ERROR" => Ok(SubtestStatus::Error),
+            "TIMEOUT" => Ok(SubtestStatus::Timeout),
+            "ASSERT" => Ok(SubtestStatus::Assert),
+            "PRECONDITION_FAILED" => Ok(SubtestStatus::PreconditionFailed),
+            "NOTRUN" => Ok(SubtestStatus::Notrun),
+            "SKIP" => Ok(SubtestStatus::Skip),
+            x => Err(Error::String(format!("Unrecognised subtest status {}", x))),
+        }
+    }
+}
+
+impl Display for SubtestStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                SubtestStatus::Pass => "PASS",
+                SubtestStatus::Fail => "FAIL",
+                SubtestStatus::Error => "ERROR",
+                SubtestStatus::Timeout => "TIMEOUT",
+                SubtestStatus::Assert => "ASSERT",
+                SubtestStatus::PreconditionFailed => "PRECONDITION_FAILED",
+                SubtestStatus::Notrun => "NOTRUN",
+                SubtestStatus::Skip => "SKIP",
+            }
+        )
     }
 }
 
@@ -68,7 +172,7 @@ fn score_run<'a>(
     for (test_id, test_results) in run {
         if let Some(categories) = categories_by_test.get(test_id) {
             let (test_passes, test_total) = if !test_results.subtests.is_empty() {
-                if test_results.status != Status::Ok && !expected_not_ok.contains(test_id) {
+                if test_results.status != TestStatus::Ok && !expected_not_ok.contains(test_id) {
                     run_score.unexpected_not_ok.insert(test_id.into());
                 }
                 (
@@ -76,7 +180,7 @@ fn score_run<'a>(
                         .subtests
                         .iter()
                         .map(|subtest| {
-                            if (subtest.status) == Status::Pass {
+                            if (subtest.status) == SubtestStatus::Pass {
                                 1
                             } else {
                                 0
@@ -86,7 +190,7 @@ fn score_run<'a>(
                     test_results.subtests.len() as u32,
                 )
             } else {
-                if test_results.status == Status::Pass {
+                if test_results.status == TestStatus::Pass {
                     (1, 1)
                 } else {
                     (0, 1)
@@ -110,18 +214,20 @@ fn interop_score<'a>(
     num_runs: usize,
 ) -> u64 {
     let mut interop_score = 0;
+    let mut num_test_scores = 0;
     for test_score in test_scores {
+        num_test_scores += 1;
         if test_score.len() != num_runs {
             continue;
         }
         let min_score = test_score
             .iter()
-            .map(|score| (1000. * (score.passes as f64 / score.total as f64).trunc()) as u64)
+            .map(|score| (1000. * score.passes as f64 / score.total as f64).trunc() as u64)
             .min()
             .unwrap_or(0);
         interop_score += min_score
     }
-    (interop_score as f64 / num_runs as f64).trunc() as u64
+    (interop_score as f64 / num_test_scores as f64).trunc() as u64
 }
 
 /// Compute the Interop scores for a set of web-platform-tests runs
@@ -132,8 +238,8 @@ fn interop_score<'a>(
 ///
 /// Returns a tuple of
 /// (Mapping from category to score per run, Mapping of category to interop score for all runs)
-pub fn score_runs(
-    runs: &[BTreeMap<String, Results>],
+pub fn score_runs<'a>(
+    runs: impl Iterator<Item = &'a BTreeMap<String, Results>>,
     tests_by_category: &BTreeMap<String, BTreeSet<String>>,
     expected_not_ok: &BTreeSet<String>,
 ) -> (BTreeMap<String, Vec<u64>>, BTreeMap<String, u64>) {
@@ -161,11 +267,13 @@ pub fn score_runs(
                 .or_insert_with(Vec::new)
                 .push(cat_idx)
         }
-        scores_by_category.insert(category.clone(), Vec::with_capacity(runs.len()));
+        scores_by_category.insert(category.clone(), Vec::with_capacity(runs.size_hint().0));
         interop_by_category.insert(category.clone(), 0);
     }
 
+    let mut run_count = 0;
     for run in runs {
+        run_count += 1;
         let run_score = score_run(
             run.iter()
                 .map(|(test_id, results)| (test_id.as_ref(), results)),
@@ -184,7 +292,7 @@ pub fn score_runs(
     }
     for (idx, name) in categories.iter().enumerate() {
         let scores = &test_scores_by_category[idx];
-        interop_by_category.insert((*name).clone(), interop_score(scores.values(), runs.len()));
+        interop_by_category.insert((*name).clone(), interop_score(scores.values(), run_count));
     }
     (scores_by_category, interop_by_category)
 }
