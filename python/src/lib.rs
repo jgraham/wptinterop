@@ -1,6 +1,7 @@
 extern crate wpt_interop as interop;
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fmt;
@@ -27,12 +28,31 @@ impl std::convert::From<Error> for PyErr {
     }
 }
 
-#[derive(FromPyObject, Debug)]
+#[derive(Debug)]
 struct Results {
-    #[pyo3(item)]
     status: String,
-    #[pyo3(item)]
     subtests: Vec<SubtestResult>,
+    expected: Option<String>,
+}
+
+impl<'source> FromPyObject<'source> for Results {
+    // Required method
+    fn extract(ob: &'source PyAny) -> PyResult<Results> {
+        // Check we get a dictionary
+        ob.downcast::<PyDict>()?;
+        let status = ob.get_item("status")?.extract()?;
+        let subtests = ob.get_item("subtests")?.extract()?;
+        let expected = if ob.contains("expected")? {
+            Some(ob.get_item("expected")?.extract()?)
+        } else {
+            None
+        };
+        Ok(Results {
+            status,
+            subtests,
+            expected,
+        })
+    }
 }
 
 impl IntoPy<PyObject> for Results {
@@ -63,6 +83,10 @@ impl TryFrom<Results> for interop::Results {
                 .iter()
                 .map(interop::SubtestResult::try_from)
                 .collect::<Result<Vec<_>, _>>()?,
+            expected: value
+                .expected
+                .map(|expected| interop::TestStatus::try_from(expected.as_ref()))
+                .transpose()?,
         })
     }
 }
@@ -76,16 +100,36 @@ impl From<interop::Results> for Results {
                 .iter()
                 .map(SubtestResult::from)
                 .collect::<Vec<_>>(),
+            expected: value.expected.map(|expected| expected.to_string()),
         }
     }
 }
 
-#[derive(FromPyObject, Debug)]
+#[derive(Debug)]
 struct SubtestResult {
-    #[pyo3(item)]
     name: String,
-    #[pyo3(item)]
     status: String,
+    expected: Option<String>,
+}
+
+impl<'source> FromPyObject<'source> for SubtestResult {
+    // Required method
+    fn extract(ob: &'source PyAny) -> PyResult<SubtestResult> {
+        // Check we get a dictionary
+        ob.downcast::<PyDict>()?;
+        let name = ob.get_item("name")?.extract()?;
+        let status = ob.get_item("status")?.extract()?;
+        let expected = if ob.contains("expected")? {
+            Some(ob.get_item("expected")?.extract()?)
+        } else {
+            None
+        };
+        Ok(SubtestResult {
+            name,
+            status,
+            expected,
+        })
+    }
 }
 
 impl IntoPy<PyObject> for SubtestResult {
@@ -94,6 +138,10 @@ impl IntoPy<PyObject> for SubtestResult {
         rv.set_item("name", self.name).expect("Failed to set id");
         rv.set_item("status", self.status)
             .expect("Failed to set subtest status");
+        if self.expected.is_some() {
+            rv.set_item("expected", self.expected)
+                .expect("Failed to set subtest expected");
+        }
         rv.into_py(py)
     }
 }
@@ -105,6 +153,11 @@ impl TryFrom<&SubtestResult> for interop::SubtestResult {
         Ok(interop::SubtestResult {
             name: value.name.clone(),
             status: interop::SubtestStatus::try_from(value.status.as_ref())?,
+            expected: value
+                .expected
+                .as_ref()
+                .map(|expected| interop::SubtestStatus::try_from(expected.as_ref()))
+                .transpose()?,
         })
     }
 }
@@ -114,25 +167,27 @@ impl From<&interop::SubtestResult> for SubtestResult {
         SubtestResult {
             name: value.name.clone(),
             status: value.status.to_string(),
+            expected: value.expected.map(|expected| expected.to_string()),
         }
     }
 }
-
-type RunScores = BTreeMap<String, Vec<u64>>;
-type InteropScore = BTreeMap<String, u64>;
 
 #[pyfunction]
 fn interop_score(
     runs: Vec<BTreeMap<String, Results>>,
     tests: BTreeMap<String, BTreeSet<String>>,
     expected_not_ok: BTreeSet<String>,
-) -> PyResult<(RunScores, InteropScore)> {
+) -> PyResult<(
+    interop::RunScores,
+    interop::InteropScore,
+    interop::ExpectedFailureScores,
+)> {
     // This is a (second?) copy of all the input data
     let mut interop_runs: Vec<BTreeMap<String, interop::Results>> = Vec::with_capacity(runs.len());
     for run in runs.into_iter() {
         let mut run_map: BTreeMap<String, interop::Results> = BTreeMap::new();
         for (key, value) in run.into_iter() {
-            run_map.insert(key, value.try_into().map_err(|err| Error::from(err))?);
+            run_map.insert(key, value.try_into().map_err(Error::from)?);
         }
         interop_runs.push(run_map);
     }
@@ -172,7 +227,11 @@ fn score_runs(
     run_ids: Vec<u64>,
     tests_by_category: BTreeMap<String, BTreeSet<String>>,
     expected_not_ok: BTreeSet<String>,
-) -> PyResult<(RunScores, InteropScore)> {
+) -> PyResult<(
+    interop::RunScores,
+    interop::InteropScore,
+    interop::ExpectedFailureScores,
+)> {
     let mut all_tests = BTreeSet::new();
     for tests in tests_by_category.values() {
         all_tests.extend(tests.iter().map(|item| item.into()));

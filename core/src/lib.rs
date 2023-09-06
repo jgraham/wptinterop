@@ -7,6 +7,9 @@ use std::fmt::Display;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
+pub type RunScores = BTreeMap<String, Vec<u64>>;
+pub type InteropScore = BTreeMap<String, u64>;
+pub type ExpectedFailureScores = BTreeMap<String, Vec<(u64, u64)>>;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -23,12 +26,16 @@ pub struct Results {
     pub status: TestStatus,
     #[serde(default)]
     pub subtests: Vec<SubtestResult>,
+    #[serde(default)]
+    pub expected: Option<TestStatus>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SubtestResult {
     pub name: String,
     pub status: SubtestStatus,
+    #[serde(default)]
+    pub expected: Option<SubtestStatus>,
 }
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug, Copy, Hash)]
@@ -148,14 +155,16 @@ impl TestScore {
 
 #[derive(Debug, Default)]
 struct RunScore {
-    category_scores: Vec<u64>,
+    category_scores: Vec<f64>,
+    category_expected_failures: Vec<f64>,
     unexpected_not_ok: BTreeSet<String>,
 }
 
 impl RunScore {
     fn new(size: usize) -> RunScore {
         RunScore {
-            category_scores: vec![0; size],
+            category_scores: vec![0.; size],
+            category_expected_failures: vec![0.; size],
             ..Default::default()
         }
     }
@@ -171,38 +180,66 @@ fn score_run<'a>(
     let mut run_score = RunScore::new(num_categories);
     for (test_id, test_results) in run {
         if let Some(categories) = categories_by_test.get(test_id) {
-            let (test_passes, test_total) = if !test_results.subtests.is_empty() {
-                if test_results.status != TestStatus::Ok && !expected_not_ok.contains(test_id) {
-                    run_score.unexpected_not_ok.insert(test_id.into());
-                }
+            if test_results.status != TestStatus::Ok && !expected_not_ok.contains(test_id) {
+                run_score.unexpected_not_ok.insert(test_id.into());
+            }
+
+            let (test_passes, expected_failures, test_total) = if !test_results.subtests.is_empty()
+            {
+                let (test_passes, expected_failures) = test_results
+                    .subtests
+                    .iter()
+                    .map(|subtest| {
+                        if (subtest.status) == SubtestStatus::Pass {
+                            (1, 0)
+                        } else {
+                            (
+                                0,
+                                if (test_results.expected.is_some()
+                                    && test_results.expected != Some(TestStatus::Ok)
+                                    && test_results.expected != Some(TestStatus::Pass))
+                                    || (subtest.expected.is_some()
+                                        && subtest.expected != Some(SubtestStatus::Pass))
+                                {
+                                    1
+                                } else {
+                                    0
+                                },
+                            )
+                        }
+                    })
+                    .fold((0, 0), |acc, elem| (acc.0 + elem.0, acc.1 + elem.1));
                 (
-                    test_results
-                        .subtests
-                        .iter()
-                        .map(|subtest| {
-                            if (subtest.status) == SubtestStatus::Pass {
-                                1
-                            } else {
-                                0
-                            }
-                        })
-                        .sum(),
+                    test_passes,
+                    expected_failures,
                     test_results.subtests.len() as u32,
                 )
             } else {
-                if test_results.status == TestStatus::Pass {
-                    (1, 1)
+                let (is_pass, expected_failure) = if test_results.status == TestStatus::Pass {
+                    (1, 0)
                 } else {
-                    (0, 1)
-                }
+                    (
+                        0,
+                        if test_results.expected.is_some()
+                            && test_results.expected != Some(TestStatus::Ok)
+                            && test_results.expected != Some(TestStatus::Pass)
+                        {
+                            1
+                        } else {
+                            0
+                        },
+                    )
+                };
+                (is_pass, expected_failure, 1)
             };
             for category_idx in categories {
                 let test_scores = &mut test_scores_by_category[*category_idx];
                 let pass_count = test_scores.entry(test_id).or_insert_with(Vec::new);
                 pass_count.push(TestScore::new(test_passes, test_total as u64));
 
-                run_score.category_scores[*category_idx] +=
-                    (1000. * test_passes as f64 / test_total as f64).trunc() as u64;
+                run_score.category_scores[*category_idx] += test_passes as f64 / test_total as f64;
+                run_score.category_expected_failures[*category_idx] +=
+                    expected_failures as f64 / test_total as f64;
             }
         }
     }
@@ -237,12 +274,14 @@ fn interop_score<'a>(
 /// * `expected_not_ok` - Set of tests which are known to have non-OK statuses
 ///
 /// Returns a tuple of
-/// (Mapping from category to score per run, Mapping of category to interop score for all runs)
+/// (Mapping from category to score per run,
+///  Mapping of category to interop score for all runs,
+///  Mapping of category to expected failure score for each run)
 pub fn score_runs<'a>(
     runs: impl Iterator<Item = &'a BTreeMap<String, Results>>,
     tests_by_category: &BTreeMap<String, BTreeSet<String>>,
     expected_not_ok: &BTreeSet<String>,
-) -> (BTreeMap<String, Vec<u64>>, BTreeMap<String, u64>) {
+) -> (RunScores, InteropScore, ExpectedFailureScores) {
     let mut unexpected_not_ok = BTreeSet::new();
 
     // Instead of passing round per-category maps, use a vector with categories at a fixed index
@@ -255,6 +294,7 @@ pub fn score_runs<'a>(
 
     let mut scores_by_category = BTreeMap::new();
     let mut interop_by_category = BTreeMap::new();
+    let mut expected_failures_by_category = BTreeMap::new();
 
     for (cat_idx, (category, tests)) in tests_by_category.iter().enumerate() {
         categories.push(category);
@@ -268,6 +308,8 @@ pub fn score_runs<'a>(
                 .push(cat_idx)
         }
         scores_by_category.insert(category.clone(), Vec::with_capacity(runs.size_hint().0));
+        expected_failures_by_category
+            .insert(category.clone(), Vec::with_capacity(runs.size_hint().0));
         interop_by_category.insert(category.clone(), 0);
     }
 
@@ -286,7 +328,23 @@ pub fn score_runs<'a>(
             scores_by_category
                 .get_mut(*name)
                 .expect("Missing category")
-                .push(run_score.category_scores[idx] / test_count_by_category[idx] as u64)
+                .push(
+                    (1000. * run_score.category_scores[idx] / test_count_by_category[idx] as f64)
+                        .trunc() as u64,
+                );
+            expected_failures_by_category
+                .get_mut(*name)
+                .expect("Missing category")
+                .push((
+                    (1000. * run_score.category_expected_failures[idx]
+                        / test_count_by_category[idx] as f64)
+                        .trunc() as u64,
+                    (1000.
+                        * (run_score.category_scores[idx]
+                            / (test_count_by_category[idx] as f64
+                                - run_score.category_expected_failures[idx])))
+                        .trunc() as u64,
+                ));
         }
         unexpected_not_ok.extend(run_score.unexpected_not_ok)
     }
@@ -294,5 +352,9 @@ pub fn score_runs<'a>(
         let scores = &test_scores_by_category[idx];
         interop_by_category.insert((*name).clone(), interop_score(scores.values(), run_count));
     }
-    (scores_by_category, interop_by_category)
+    (
+        scores_by_category,
+        interop_by_category,
+        expected_failures_by_category,
+    )
 }

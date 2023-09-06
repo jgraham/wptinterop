@@ -182,7 +182,8 @@ def load_wptreport(path: str) -> Mapping[str, Any]:
 
 
 def load_taskcluster_results(log_paths: Iterable[str],
-                             all_tests: Set[str]) -> Mapping[str, Any]:
+                             all_tests: Set[str],
+                             expected_failures: Mapping[str, Set[Optional[str]]]) -> Mapping[str, Any]:
     run_results = {}
     for path in log_paths:
         log_results = load_wptreport(path)
@@ -195,6 +196,13 @@ def load_taskcluster_results(log_paths: Iterable[str],
             if test_name in run_results:
                 print(f"  Warning: got duplicate results for {test_name}")
             run_results[test_name] = results
+            if test_name in expected_failures:
+                if None in expected_failures[test_name]:
+                    run_results[test_name]["expected"] = "FAIL"
+                else:
+                    for subtest_result in run_results[test_name]:
+                        if subtest_result["name"] in expected_failures[test_name]:
+                            subtest_result["expected"] = "FAIL"
     return run_results
 
 
@@ -253,7 +261,7 @@ def score_runs_by_date(runs_by_date: Mapping[datetime, Mapping[str, Mapping[str,
 
             run_ids = [item["id"] for item in runs]
 
-            browser_scores, interop_scores = _wpt_interop.score_runs(results_cache_path, run_ids, tests_by_category, set())
+            browser_scores, interop_scores, _ = _wpt_interop.score_runs(results_cache_path, run_ids, tests_by_category, set())
             for i, run in enumerate(runs):
                 run_score = {}
                 for category in browser_scores.keys():
@@ -269,8 +277,9 @@ def score_runs_by_date(runs_by_date: Mapping[datetime, Mapping[str, Mapping[str,
 def score_wptreports(
     run_logs: Iterable[Iterable[str]],
     year: int = 2023,
-    category_filter: Optional[Callable[[str], bool]] = None
-) -> Mapping[str, List[int]]:
+    category_filter: Optional[Callable[[str], bool]] = None,
+    expected_failures: Optional[Mapping[str, Set[Optional[str]]]] = None,
+) -> Tuple[Mapping[str, List[int]], Optional[Mapping[str, List[int]]]]:
     """Get Interop scores from a list of paths to wptreport files
 
     :param runs: A list/iterable with one item per run. Each item is a
@@ -279,14 +288,22 @@ def score_wptreports(
     :param:
 
     """
+    include_expected_failures = expected_failures is not None
+    if not include_expected_failures:
+        expected_failures = {}
+
     tests_by_category, all_tests = get_category_data(year, category_filter=category_filter)
     runs_results = []
     for log_paths in run_logs:
-        runs_results.append(load_taskcluster_results(log_paths, all_tests))
+        runs_results.append(load_taskcluster_results(log_paths, all_tests, expected_failures))
 
-    run_scores, _ = _wpt_interop.interop_score(runs_results, tests_by_category, set())
+    run_scores, _, expected_failure_scores = _wpt_interop.interop_score(runs_results, tests_by_category, set())
 
-    return run_scores
+    if not include_expected_failures:
+        # Otherwise this will just be all zeros
+        expected_failure_scores = None
+
+    return run_scores, expected_failure_scores
 
 
 def score_runs(year: int,
