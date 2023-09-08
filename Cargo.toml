@@ -3,3 +3,4 @@ members = [
     "core",
     "python"
 ]
+resolver = "2"
