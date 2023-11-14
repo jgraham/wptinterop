@@ -1,3 +1,4 @@
+pub mod metadata;
 pub mod results_cache;
 
 use serde_derive::Deserialize;
@@ -16,7 +17,9 @@ pub enum Error {
     #[error(transparent)]
     Git(#[from] git2::Error),
     #[error(transparent)]
-    Serde(#[from] serde_json::Error),
+    SerdeJson(#[from] serde_json::Error),
+    #[error(transparent)]
+    SerdeYaml(#[from] serde_yaml::Error),
     #[error("{0}")]
     String(String),
 }
@@ -234,7 +237,7 @@ fn score_run<'a>(
             };
             for category_idx in categories {
                 let test_scores = &mut test_scores_by_category[*category_idx];
-                let pass_count = test_scores.entry(test_id).or_insert_with(Vec::new);
+                let pass_count = test_scores.entry(test_id).or_default();
                 pass_count.push(TestScore::new(test_passes, test_total as u64));
 
                 run_score.category_scores[*category_idx] += test_passes as f64 / test_total as f64;

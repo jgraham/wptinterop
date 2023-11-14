@@ -251,11 +251,45 @@ fn score_runs(
     ))
 }
 
+type TestSet = BTreeSet<String>;
+type TestsByCategory = BTreeMap<String, TestSet>;
+
+#[pyfunction]
+fn interop_tests(
+    metadata_repo_path: PathBuf,
+    labels_by_category: BTreeMap<String, BTreeSet<String>>,
+    metadata_revision: Option<String>,
+) -> PyResult<(String, TestsByCategory, TestSet)> {
+    let mut tests_by_category = BTreeMap::new();
+    let mut all_tests = BTreeSet::new();
+    let metadata_repo =
+        interop::metadata::MetadataRepo::new(&metadata_repo_path).map_err(Error::from)?;
+    let commit = if let Some(revision) = metadata_revision {
+        metadata_repo.get_commit(&revision).map_err(Error::from)?
+    } else {
+        metadata_repo.head().map_err(Error::from)?
+    };
+    let metadata = metadata_repo.read_metadata(&commit).map_err(Error::from)?;
+    let patterns_by_label = metadata.patterns_by_label(None);
+    for (category, labels) in labels_by_category.into_iter() {
+        let mut tests = BTreeSet::new();
+        for label in labels.iter() {
+            if let Some(patterns) = patterns_by_label.get(&label.as_str()) {
+                tests.extend(patterns.iter().map(|x| x.to_string()));
+                all_tests.extend(patterns.iter().map(|x| x.to_string()));
+            }
+        }
+        tests_by_category.insert(category, tests);
+    }
+    Ok((commit.id().to_string(), tests_by_category, all_tests))
+}
+
 #[pymodule]
 #[pyo3(name = "_wpt_interop")]
 fn _wpt_interop(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interop_score, m)?)?;
     m.add_function(wrap_pyfunction!(run_results, m)?)?;
     m.add_function(wrap_pyfunction!(score_runs, m)?)?;
+    m.add_function(wrap_pyfunction!(interop_tests, m)?)?;
     Ok(())
 }

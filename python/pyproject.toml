@@ -15,11 +15,25 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-install_requires = [
-  "requests"
+dependencies = [
+  "requests==2.31.0"
 ]
+
+[project.scripts]
+interop-score = "wpt_interop:main.main"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "wpt_interop._wpt_interop"
+
+[tool.ruff]
+line-length = 100
+
+[tool.flake8]
+max-line-length = 100
+
+[tool.mypy]
+files = "python/wpt_interop/**/*.py"
+check_untyped_defs = true
+disallow_untyped_defs = true
