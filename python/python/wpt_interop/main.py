@@ -62,7 +62,7 @@ interop_by_year = cast(Mapping[int, Interop], {item.year: item() for item in [In
 
 class InteropScore(Repo):
     name = "interop-scores"
-    remote = None
+    remote = "https://github.com/jgraham/interop-results.git"
     bare = False
     main_branch = "main"
 

@@ -23,3 +23,5 @@ jobs:
 
     - name: "Update Interop scores"
       run: "./ci/update-scores.sh"
+      env:
+        GITHUB_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
