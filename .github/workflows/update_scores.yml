@@ -2,8 +2,8 @@ name: Update interop-scores
 on:
   push:
   # Trigger every three hours, or manually.
-  # schedule:
-  #  - cron: '20 */3 * * *'
+  schedule:
+    - cron: '20 */3 * * *'
   workflow_dispatch:
 jobs:
   update-gh-pages:
