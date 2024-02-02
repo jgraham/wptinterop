@@ -57,7 +57,12 @@ class Interop2023(Interop):
     products = ["chrome", "firefox", "safari"]
 
 
-interop_by_year = cast(Mapping[int, Interop], {item.year: item() for item in [Interop2023]})
+class Interop2024(Interop):
+    year = 2024
+    products = ["chrome", "firefox", "safari"]
+
+
+interop_by_year = cast(Mapping[int, Interop], {item.year: item() for item in [Interop2024]})
 
 
 class InteropScore(Repo):
@@ -693,7 +698,7 @@ def get_parser() -> argparse.ArgumentParser:
                         help="Path to metadata repo")
     parser.add_argument("--interop-score", default=None,
                         help="Path to output interop-score repo")
-    parser.add_argument("--year", default=2023, type=int,
+    parser.add_argument("--year", default=2024, type=int,
                         help="Interop year to update")
     parser.add_argument("--commit-on-error", action="store_true",
                         help="Commit complete changes even  if there's an uncaught exception")

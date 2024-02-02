@@ -137,7 +137,7 @@ def score_runs_by_date(runs_by_date: RunsByDate,
 
 def score_wptreports(
     run_logs: Iterable[Iterable[str]],
-    year: int = 2023,
+    year: int = 2024,
     category_filter: Optional[Callable[[str], bool]] = None,
     expected_failures: Optional[Mapping[str, set[Optional[str]]]] = None,
 ) -> tuple[Mapping[str, list[int]], Optional[ExpectedFailureScores]]:
