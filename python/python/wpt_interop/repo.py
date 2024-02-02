@@ -73,14 +73,18 @@ class Repo:
             if self.remote is None:
                 return
             args = []
-            if self.fetch_tags:
+            if not self.bare and self.fetch_tags:
                 args.append("--tags")
             args.append(self.remote)
+            if self.bare:
+                args.append("+refs/heads/*:refs/heads/*")
+                if self.fetch_tags:
+                    args.append("+refs/tags/*:refs/tags/*")
             self.git("fetch", *args)
             if not self.bare:
                 assert self.main_branch is not None
                 remotes = self.git("remote")
-                if not b"origin\n" in remotes.stdout:
+                if b"origin\n" not in remotes.stdout:
                     self.git("remote", "add", "origin", self.remote)
                 try:
                     self.git("rev-parse", "--verify", self.main_branch)
@@ -90,7 +94,7 @@ class Repo:
                     self.git("checkout", self.main_branch)
                 self.git("merge", "--ff-only")
 
-    def clean(self):
+    def clean(self) -> None:
         if self.bare:
             raise ValueError("Can't clean bare repository")
         if not os.path.exists(self.path) or not os.path.exists(os.path.join(self.path, ".git")):
@@ -108,7 +112,7 @@ class Repo:
     def commit(self, msg: str) -> None:
         if self.bare:
             raise ValueError("Can't commit in bare repository")
-        result = self.git("status", "--porcelain")
+        self.git("status", "--porcelain")
         if self.has_staged():
             logger.info(f"Commiting changes to {self.name}")
             self.git("commit", "-m", msg)
