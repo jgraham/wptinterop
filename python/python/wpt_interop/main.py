@@ -85,6 +85,15 @@ class InteropScore(Repo):
                 revision = os.path.basename(path)
                 yield revision, path
 
+    def skip_revisions(self, interop: Interop, channel: str) -> "SkipRevisions":
+        rel_path = os.path.join(str(interop.year), f"skip-revisions-{channel}")
+        path = os.path.join(self.path, rel_path)
+        last_commit_output = self.git("log", "--pretty=%H", "-n1", "--", rel_path)
+        skip_data_commit = last_commit_output.stdout.strip()
+        if not skip_data_commit:
+            skip_data_commit = None
+        return SkipRevisions.load(path, skip_data_commit)
+
     def runs(self, interop: Interop, channel: str) -> RunsByRevision:
         rv = []
         for revision, path in self.revision_paths(interop):
@@ -197,6 +206,28 @@ class RevisionData:
                 writer.writerow([category, score])
 
 
+class SkipRevisions:
+    def __init__(self, data: set[str], commit: Optional[str]):
+        self.data: set[str] = data
+        self.commit_revision = commit
+
+    @classmethod
+    def load(cls, path: str, commit_revision: str) -> Self:
+        data = set()
+        try:
+            with open(path) as f:
+                for line in f:
+                    line = line.split("#", 1)[0].strip()
+                    if line:
+                        data.add(line)
+        except OSError:
+            pass
+        return cls(data, commit_revision)
+
+    def __contains__(self, rev: str) -> bool:
+        return rev in self.data
+
+
 class AlignedRunData:
     def __init__(self,
                  revision: str,
@@ -256,16 +287,18 @@ class HistoricAlignedRunData(AlignedRunData):
 
 
 class AlignedRunsMetadata:
-    def __init__(self, metadata_revision: str):
+    def __init__(self, metadata_revision: str, skip_data_commit: Optional[str]):
         self.metadata_revision = metadata_revision
+        self.skip_data_commit = skip_data_commit
 
     @classmethod
     def from_json(cls, data: Mapping[str, Any]) -> Self:
-        return cls(data["metadata_revision"])
+        return cls(data["metadata_revision"], data.get("skip_data_revision"))
 
     def to_json(self) -> Mapping[str, Any]:
         return {
-            "metadata_revision": self.metadata_revision
+            "metadata_revision": self.metadata_revision,
+            "skip_data_commit": self.skip_data_commit
         }
 
     def write(self, path: str) -> None:
@@ -631,17 +664,21 @@ def update_channel(results_analysis_repo: ResultsAnalysisCache,
         # Check for newly aligned runs
         aligned_all = interop_repo.latest_aligned(interop, channel)
         recompute_all = True
+        skip_revisions = interop_repo.skip_revisions(interop, channel)
         if aligned_all is not None:
             # Check if the interop tests changed since the previous metadata revision
             metadata_revision = aligned_all.metadata.metadata_revision
             _, prev_tests_by_category, _ = metadata_repo.tests_by_category(interop.categories(),
                                                                            metadata_revision)
-            recompute_all = prev_tests_by_category != tests_by_category
+            recompute_all = (prev_tests_by_category != tests_by_category or
+                             aligned_all.metadata.skip_data_commit !=
+                             skip_revisions.commit_revision)
         if not recompute_all:
             logger.info("Metadata has not changed; adding new runs")
             assert aligned_all is not None
             for revision_runs in all_runs.filter_by_revisions(set(updated.keys())):
-                if not revision_runs.is_aligned(interop.products):
+                if (not revision_runs.is_aligned(interop.products) or
+                    revision_runs.revision in skip_revisions):
                     continue
                 try:
                     aligned_run_data = score_aligned_runs(results_analysis_repo.path,
@@ -659,9 +696,10 @@ def update_channel(results_analysis_repo: ResultsAnalysisCache,
         else:
             logger.info("Metadata changed; recomputing all runs")
             data = []
-            AlignedRunsMetadata(metadata_revision)
+            AlignedRunsMetadata(metadata_revision, skip_revisions.commit_revision)
             for revision_runs in all_runs:
-                if not revision_runs.is_aligned(interop.products):
+                if (not revision_runs.is_aligned(interop.products) or
+                    revision_runs.revision in skip_revisions):
                     continue
                 try:
                     aligned_run_data = score_aligned_runs(results_analysis_repo.path,
@@ -675,7 +713,8 @@ def update_channel(results_analysis_repo: ResultsAnalysisCache,
   {e}""")
                         continue
                 data.append(aligned_run_data)
-            new_aligned = AlignedRuns(data, AlignedRunsMetadata(metadata_revision))
+            new_aligned = AlignedRuns(data, AlignedRunsMetadata(metadata_revision,
+                                                                skip_revisions.commit_revision))
         interop_repo.set_latest_aligned(interop, channel, new_aligned)
 
         if new_aligned.data:
