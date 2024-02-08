@@ -706,7 +706,7 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     logging.getLogger("wpt_interop").setLevel(logging.INFO)
 
     parser = get_parser()
