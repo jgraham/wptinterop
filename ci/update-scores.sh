@@ -9,6 +9,6 @@ git config --global user.email "interop-scores-bot@users.noreply.github.com"
 git config --global user.name "interop-scores-bot"
 
 pip install -e python/
-interop-score --repo-root repos
+interop-score --repo-root repos --log-level debug
 cd repos/interop-scores
 git push https://x-access-token:${GITHUB_TOKEN}@github.com/jgraham/interop-results.git HEAD:main

@@ -690,6 +690,11 @@ def update_channel(results_analysis_repo: ResultsAnalysisCache,
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--log-level", default="info",
+                        choices=["critical", "warn" "info", "debug"],
+                        help="Logging level")
+    parser.add_argument("--pdb", action="store_true",
+                        help="Drop into pdb on exception")
     parser.add_argument("--repo-root", default=None,
                         help="Base path for working repos")
     parser.add_argument("--results-analysis-cache", default=None,
@@ -706,11 +711,23 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.DEBUG)
-    logging.getLogger("wpt_interop").setLevel(logging.INFO)
-
     parser = get_parser()
     args = parser.parse_args()
+    try:
+        run(args)
+    except Exception:
+        if args.pdb:
+            import traceback
+            traceback.print_exc()
+            import pdb
+            pdb.post_mortem()
+        else:
+            raise
+
+
+def run(args: argparse.Namespace) -> None:
+    logging.basicConfig(level=logging.getLevelNamesMapping()[args.log_level.upper()])
+    logging.getLogger("wpt_interop").setLevel(logging.INFO)
 
     results_analysis_repo = ResultsAnalysisCache(args.results_analysis_cache,
                                                  args.repo_root)
@@ -744,10 +761,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        import pdb
-        import traceback
-        traceback.print_exc()
-        pdb.post_mortem()
+    main()
