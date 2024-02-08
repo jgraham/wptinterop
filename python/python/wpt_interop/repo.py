@@ -90,9 +90,10 @@ class Repo:
                     self.git("rev-parse", "--verify", self.main_branch)
                 except subprocess.CalledProcessError:
                     self.git("checkout", "-b", self.main_branch, f"origin/{self.main_branch}")
-                else:
-                    self.git("checkout", self.main_branch)
-                self.git("merge", "--ff-only")
+
+            if self.main_branch is not None:
+                self.git("checkout", self.main_branch)
+                self.git("merge", "--ff-only", f"origin/{self.main_branch}")
 
     def clean(self) -> None:
         if self.bare:
