@@ -10,7 +10,7 @@ logger = logging.getLogger("wpt_interop.repo")
 
 class Repo:
     name: str
-    remote: Optional[str]
+    remote: str
     bare: bool
     main_branch: Optional[str] = None
     fetch_tags: bool = False
@@ -70,8 +70,6 @@ class Repo:
                 args.extend([self.remote, self.path])
                 self.git("clone", *args)
         else:
-            if self.remote is None:
-                return
             args = []
             if not self.bare and self.fetch_tags:
                 args.append("--tags")
