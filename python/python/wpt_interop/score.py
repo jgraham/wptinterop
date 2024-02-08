@@ -1,6 +1,7 @@
 import csv
 import gzip
 import json
+import logging
 import os
 import subprocess
 from datetime import datetime
@@ -10,6 +11,8 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional, cast
 from . import _wpt_interop  # type: ignore
 from .runs import RunsByDate, fetch_runs, group_by_date
 from .metadata import get_category_data
+
+logger = logging.getLogger("wpt_interop.score")
 
 DEFAULT_RESULTS_CACHE_PATH = os.path.join(os.path.abspath(os.curdir),
                                           "results-analysis-cache.git")
@@ -62,7 +65,7 @@ def load_taskcluster_results(log_paths: Iterable[str],
                 # Sometimes we have multiple jobs which log SKIP for tests that aren't run
                 continue
             if test_name in run_results:
-                print(f"  Warning: got duplicate results for {test_name}")
+                logger.warning(f"Got duplicate results for {test_name}")
             run_results[test_name] = results
             if test_name in expected_failures:
                 if None in expected_failures[test_name]:
@@ -110,7 +113,7 @@ def score_runs_by_date(runs_by_date: RunsByDate,
         results_by_date[date] = {}
         for revision_runs in date_runs:
             revision = revision_runs.revision
-            print(f"Scoring {date}: {revision}")
+            logger.info(f"Scoring {date}: {revision}")
             results_by_date[date][revision] = {}
 
             run_ids = [item.run_id for item in revision_runs.runs]
@@ -121,8 +124,8 @@ def score_runs_by_date(runs_by_date: RunsByDate,
                                                                             tests_by_category,
                                                                             set())
             except Exception:
-                print("Failed to compute score for run ids "
-                      f"{' '.join(str(item) for item in run_ids)}")
+                logger.warning("Failed to compute score for run ids "
+                               f"{' '.join(str(item) for item in run_ids)}")
             for i, run in enumerate(revision_runs.runs):
                 run_score: dict[str, Any] = {}
                 for category in browser_scores.keys():

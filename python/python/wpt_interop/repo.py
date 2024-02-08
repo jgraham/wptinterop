@@ -24,7 +24,7 @@ class Repo:
 
     def git(self, command: str, *args: str) -> subprocess.CompletedProcess:
         cmd_args = ["git", command] + list(args)
-        logger.debug(f"Running {' '.join(cmd_args)}")
+        logger.info(f"Running {' '.join(cmd_args)}")
         try:
             complete = subprocess.run(cmd_args, cwd=self.path, check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
@@ -35,9 +35,9 @@ class Repo:
                 logger.warning(f"Captured stderr:\n{e.stderr.decode('utf8', 'replace')}")
             raise
         if complete.stdout:
-            logger.debug(f"Captured stdout:\n{complete.stdout.decode('utf8', 'replace')}")
+            logger.info(f"Captured stdout:\n{complete.stdout.decode('utf8', 'replace')}")
         if complete.stderr:
-            logger.debug(f"Captured stderr:\n{complete.stderr.decode('utf8', 'replace')}")
+            logger.info(f"Captured stderr:\n{complete.stderr.decode('utf8', 'replace')}")
         return complete
 
     def status(self, untracked: bool = False) -> bytes:
@@ -54,8 +54,9 @@ class Repo:
         return False
 
     def update(self) -> None:
-        logger.info(f"Updating {self.name}")
+        logger.info(f"Updating repo {self.name} {self.path} {os.path.exists(self.path)}")
         if not os.path.exists(self.path):
+            logger.info("Repo doesn't exist, creating a new clone")
             os.makedirs(self.path)
             args = []
             if self.bare:
@@ -70,6 +71,7 @@ class Repo:
                 args.extend([self.remote, self.path])
                 self.git("clone", *args)
         else:
+            logger.info("Repo exists, fetching updates")
             args = []
             if not self.bare and self.fetch_tags:
                 args.append("--tags")
@@ -92,6 +94,8 @@ class Repo:
             if self.main_branch is not None:
                 self.git("checkout", self.main_branch)
                 self.git("merge", "--ff-only", f"origin/{self.main_branch}")
+            complete = self.git("log", "--oneline", "-n10")
+
 
     def clean(self) -> None:
         if self.bare:
