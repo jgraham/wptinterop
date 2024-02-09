@@ -76,10 +76,9 @@ class Repo:
             if not self.bare and self.fetch_tags:
                 args.append("--tags")
             args.append(self.remote)
-            if self.bare:
-                args.append("+refs/heads/*:refs/heads/*")
-                if self.fetch_tags:
-                    args.append("+refs/tags/*:refs/tags/*")
+            args.append("+refs/heads/*:refs/heads/*")
+            if self.fetch_tags:
+                args.append("+refs/tags/*:refs/tags/*")
             self.git("fetch", *args)
             if not self.bare:
                 assert self.main_branch is not None
