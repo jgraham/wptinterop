@@ -76,21 +76,24 @@ class Repo:
             if not self.bare and self.fetch_tags:
                 args.append("--tags")
             args.append(self.remote)
-            args.append("+refs/heads/*:refs/heads/*")
-            if self.fetch_tags:
-                args.append("+refs/tags/*:refs/tags/*")
-            self.git("fetch", *args)
-            if not self.bare:
+            if self.bare:
+                args.append("+refs/heads/*:refs/heads/*")
+                if self.fetch_tags:
+                    args.append("+refs/tags/*:refs/tags/*")
+            else:
                 assert self.main_branch is not None
                 remotes = self.git("remote")
                 if b"origin\n" not in remotes.stdout:
                     self.git("remote", "add", "origin", self.remote)
+
+                # args.append("+refs/heads/*:refs/remotes/origin/*")
+            self.git("fetch", *args)
+            if self.main_branch is not None:
                 try:
                     self.git("rev-parse", "--verify", self.main_branch)
                 except subprocess.CalledProcessError:
                     self.git("checkout", "-b", self.main_branch, f"origin/{self.main_branch}")
 
-            if self.main_branch is not None:
                 self.git("checkout", self.main_branch)
                 self.git("merge", "--ff-only", f"origin/{self.main_branch}")
             complete = self.git("log", "--oneline", "-n10")
