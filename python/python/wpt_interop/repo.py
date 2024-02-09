@@ -85,8 +85,7 @@ class Repo:
                 remotes = self.git("remote")
                 if b"origin\n" not in remotes.stdout:
                     self.git("remote", "add", "origin", self.remote)
-
-                # args.append("+refs/heads/*:refs/remotes/origin/*")
+                args.append("+refs/heads/*:refs/remotes/origin/*")
             self.git("fetch", *args)
             if self.main_branch is not None:
                 try:
