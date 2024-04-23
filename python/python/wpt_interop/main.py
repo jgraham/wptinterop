@@ -18,9 +18,16 @@ ScoresByCategory = Mapping[str, list[int]]
 logger = logging.getLogger("wpt_interop.main")
 
 
+class Configuration:
+    def __init__(self, platform: str, channel: str, products: list[str]):
+        self.platform = platform
+        self.products = products
+        self.channel = channel
+
+
 class Interop:
     year: int
-    products: list[str]
+    configurations: list[Configuration]
     _category_data: Optional[Mapping[str, Mapping[str, Any]]] = None
     _interop_data: Optional[Mapping[str, Mapping[str, Any]]] = None
 
@@ -54,15 +61,22 @@ class Interop:
 
 class Interop2023(Interop):
     year = 2023
-    products = ["chrome", "firefox", "safari"]
+    configurations = [Configuration("desktop", "nightly", ["chrome", "firefox", "safari"]),
+                      Configuration("desktop", "stable", ["chrome", "firefox", "safari"])]
 
 
 class Interop2024(Interop):
     year = 2024
-    products = ["chrome", "firefox", "safari"]
+    configurations = [Configuration("desktop", "experimental", ["chrome", "firefox", "safari"]),
+                      Configuration("desktop", "stable", ["chrome", "firefox", "safari"]),
+                      Configuration("mobile", "experimental", ["chrome_android", "firefox_android"])]
 
 
 interop_by_year = cast(Mapping[int, Interop], {item.year: item() for item in [Interop2024]})
+
+
+def platform_prefix(configuration: Configuration) -> str:
+    return "" if configuration.platform == "desktop" else f"{configuration.platform}-"
 
 
 class InteropScore(Repo):
@@ -85,10 +99,10 @@ class InteropScore(Repo):
                 revision = os.path.basename(path)
                 yield revision, path
 
-    def runs(self, interop: Interop, channel: str) -> RunsByRevision:
+    def runs(self, interop: Interop, configuration: Configuration) -> RunsByRevision:
         rv = []
         for revision, path in self.revision_paths(interop):
-            revision_data = RevisionData.load(path, channel, revision)
+            revision_data = RevisionData.load(path, configuration, revision)
             if revision_data.runs:
                 rv.append(revision_data.runs)
 
@@ -96,17 +110,17 @@ class InteropScore(Repo):
 
     def add_run_score(self,
                       interop: Interop,
-                      channel: str,
+                      configuration: Configuration,
                       run: Run,
                       metadata_revision: str,
                       score: Mapping[str, int]) -> None:
         revision_dir = os.path.join(self.revisions_base_dir(interop), run.full_revision_hash)
         if not os.path.exists(revision_dir):
             os.makedirs(revision_dir)
-        revision_data = RevisionData.load(revision_dir, channel, run.full_revision_hash)
+        revision_data = RevisionData.load(revision_dir, configuration, run.full_revision_hash)
         updated_paths = revision_data.add_run(revision_dir,
                                               interop,
-                                              channel,
+                                              configuration,
                                               run,
                                               metadata_revision,
                                               score)
@@ -119,29 +133,29 @@ class InteropScore(Repo):
             os.makedirs(latest_dir)
         return latest_dir
 
-    def latest_aligned(self, interop: Interop, channel: str) -> Optional["AlignedRuns"]:
-        return AlignedRuns.load(self.latest_aligned_dir(interop), interop, channel)
+    def latest_aligned(self, interop: Interop, configuration: Configuration) -> Optional["AlignedRuns"]:
+        return AlignedRuns.load(self.latest_aligned_dir(interop), interop, configuration)
 
     def set_latest_aligned(self,
                            interop: Interop,
-                           channel: str,
+                           configuration: Configuration,
                            aligned_runs: "AlignedRuns") -> None:
-        updated_paths = aligned_runs.write(self.latest_aligned_dir(interop), interop, channel)
+        updated_paths = aligned_runs.write(self.latest_aligned_dir(interop), interop, configuration)
         self.git("add", *updated_paths)
         daily = aligned_runs.filter_by_day()
-        updated_paths = daily.write(self.latest_aligned_dir(interop), interop, channel, True)
+        updated_paths = daily.write(self.latest_aligned_dir(interop), interop, configuration, True)
         self.git("add", *updated_paths)
 
-    def historic_aligned(self, interop: Interop, channel: str) -> "HistoricAlignedRuns":
-        return HistoricAlignedRuns.load(self.latest_aligned_dir(interop), interop, channel)
+    def historic_aligned(self, interop: Interop, configuration: Configuration) -> "HistoricAlignedRuns":
+        return HistoricAlignedRuns.load(self.latest_aligned_dir(interop), interop, configuration)
 
     def set_historic_aligned(self,
                              interop: Interop,
-                             channel: str,
+                             configuration: Configuration,
                              historic_aligned_runs: "HistoricAlignedRuns") -> None:
         updated_paths = historic_aligned_runs.write(self.latest_aligned_dir(interop),
                                                     interop,
-                                                    channel)
+                                                    configuration)
         self.git("add", *updated_paths)
 
 
@@ -150,13 +164,13 @@ class RevisionData:
         self.runs = runs
 
     @staticmethod
-    def path(base_path: str, channel: str) -> str:
-        runs_path = os.path.join(base_path, f"runs-{channel}.json")
+    def path(base_path: str, configuration: Configuration) -> str:
+        runs_path = os.path.join(base_path, f"runs-{platform_prefix(configuration)}{configuration.channel}.json")
         return runs_path
 
     @classmethod
-    def load(self, base_path: str, channel: str, revision: str) -> "RevisionData":
-        runs_path = RevisionData.path(base_path, channel)
+    def load(self, base_path: str, configuration: Configuration, revision: str) -> "RevisionData":
+        runs_path = RevisionData.path(base_path, configuration)
         try:
             with open(runs_path) as f:
                 runs = [Run.from_json(item) for item in json.load(f)]
@@ -167,12 +181,12 @@ class RevisionData:
     def add_run(self,
                 base_path: str,
                 interop: Interop,
-                channel: str,
+                configuration: Configuration,
                 run: Run,
                 metadata_revision: str,
                 score: Mapping[str, int]) -> list[str]:
         updated_files = []
-        runs_path = RevisionData.path(base_path, channel)
+        runs_path = RevisionData.path(base_path, configuration)
 
         if not any(item.run_id == run.run_id for item in self.runs):
             self.runs.runs.append(run)
@@ -181,7 +195,7 @@ class RevisionData:
             updated_files.append(runs_path)
 
         score_path = os.path.join(base_path,
-                                  f"{run.browser_name}-{channel}-{metadata_revision}.csv")
+                                  f"{run.browser_name}-{platform_prefix(configuration)}{configuration.channel}-{metadata_revision}.csv")
         self.write(score_path, interop, score)
         updated_files.append(score_path)
         return updated_files
@@ -295,17 +309,18 @@ class AlignedRuns:
         return self.__class__(runs, self.metadata)
 
     @staticmethod
-    def paths(base_path: str, channel: str, date_only: bool = False) -> tuple[str, str]:
+    def paths(base_path: str, configuration: Configuration, date_only: bool = False) -> tuple[str, str]:
+
         suffix = "-daily" if date_only else ""
-        return (os.path.join(base_path, f"{channel}-current{suffix}.csv"),
-                os.path.join(base_path, f"{channel}-current-metadata.json"))
+        return (os.path.join(base_path, f"{platform_prefix(configuration)}{configuration.channel}-current{suffix}.csv"),
+                os.path.join(base_path, f"{platform_prefix(configuration)}{configuration.channel}-current-metadata.json"))
 
     @classmethod
-    def load(cls, base_path: str, interop: Interop, channel: str) -> Optional[Self]:
-        data_path, metadata_path = cls.paths(base_path, channel, False)
+    def load(cls, base_path: str, interop: Interop, configuration: Configuration) -> Optional[Self]:
+        data_path, metadata_path = cls.paths(base_path, configuration, False)
         try:
             with open(data_path) as f:
-                data = cls.data_from_csv(interop, csv.reader(f))
+                data = cls.data_from_csv(interop, configuration, csv.reader(f))
             with open(metadata_path) as f:
                 metadata = AlignedRunsMetadata.from_json(json.load(f))
                 return cls(data, metadata)
@@ -315,14 +330,14 @@ class AlignedRuns:
     def write(self,
               base_path: str,
               interop: Interop,
-              channel: str,
+              configuration: Configuration,
               date_only: bool = False) -> list[str]:
-        data_path, metadata_path = self.paths(base_path, channel, date_only)
+        data_path, metadata_path = self.paths(base_path, configuration, date_only)
 
         categories = list(interop.categories().keys())
         categories.sort()
         headers = ["date"]
-        for product in interop.products:
+        for product in configuration.products:
             headers.append(f"{product}-version")
             headers.extend(f"{product}-{category}" for category in categories)
         headers.extend(f"interop-{category}" for category in categories)
@@ -332,7 +347,7 @@ class AlignedRuns:
             writer = csv.writer(f)
             writer.writerow(headers)
             for row in self.data:
-                writer.writerow(row.to_list(interop.products, date_only))
+                writer.writerow(row.to_list(configuration.products, date_only))
 
         rv = [data_path]
 
@@ -343,15 +358,16 @@ class AlignedRuns:
         return rv
 
     @staticmethod
-    def data_from_csv(interop: Interop, rows: Iterable[list[str]]) -> list[AlignedRunData]:
+    def data_from_csv(interop: Interop, configuration: Configuration, rows: Iterable[list[str]]) -> list[AlignedRunData]:
         rv = []
         metadata_columns = {"revision", "date"}
-        products = set(interop.products)
+        products = set(configuration.products)
         for (metadata_values,
              product_versions,
              scores_by_category,
              interop_scores) in read_scores_csv(metadata_columns,
                                                 interop,
+                                                configuration,
                                                 True,
                                                 rows):
             run_date = datetime.fromisoformat(metadata_values["date"])
@@ -378,15 +394,15 @@ class HistoricAlignedRuns:
         return revision in self.revisions
 
     @staticmethod
-    def path(base_path: str, channel: str, date_only: bool = False) -> str:
-        return os.path.join(base_path, f"{channel}-historic.csv")
+    def path(base_path: str, configuration: Configuration, date_only: bool = False) -> str:
+        return os.path.join(base_path, f"{platform_prefix(configuration)}{configuration.channel}-historic.csv")
 
     @classmethod
-    def load(cls, base_path: str, interop: Interop, channel: str) -> Self:
-        data_path = cls.path(base_path, channel, False)
+    def load(cls, base_path: str, interop: Interop, configuration: Configuration) -> Self:
+        data_path = cls.path(base_path, configuration, False)
         try:
             with open(data_path) as f:
-                data = cls.data_from_csv(interop, csv.reader(f))
+                data = cls.data_from_csv(interop, configuration, csv.reader(f))
         except OSError:
             data = []
         return cls(data)
@@ -394,14 +410,14 @@ class HistoricAlignedRuns:
     def write(self,
               base_path: str,
               interop: Interop,
-              channel: str,
+              configuration: Configuration,
               date_only: bool = False) -> list[str]:
-        data_path = self.path(base_path, channel, date_only)
+        data_path = self.path(base_path, configuration, date_only)
 
         categories = list(interop.categories().keys())
         categories.sort()
         headers = ["date"]
-        for product in interop.products:
+        for product in configuration.products:
             headers.append(f"{product}-version")
             headers.extend(f"{product}-{category}" for category in categories)
         headers.extend(f"interop-{category}" for category in categories)
@@ -411,12 +427,12 @@ class HistoricAlignedRuns:
             writer = csv.writer(f)
             writer.writerow(headers)
             for row in self.data:
-                writer.writerow(row.to_list(interop.products, date_only))
+                writer.writerow(row.to_list(configuration.products, date_only))
 
         return [data_path]
 
     @staticmethod
-    def data_from_csv(interop: Interop, rows: Iterable[list[str]]) -> list[HistoricAlignedRunData]:
+    def data_from_csv(interop: Interop, configuration: Configuration, rows: Iterable[list[str]]) -> list[HistoricAlignedRunData]:
         rv = []
         metadata_columns = {"revision", "metadata-revision", "date"}
         for (metadata_values,
@@ -424,6 +440,7 @@ class HistoricAlignedRuns:
              scores_by_category,
              interop_scores) in read_scores_csv(metadata_columns,
                                                 interop,
+                                                configuration,
                                                 True,
                                                 rows):
             run_date = datetime.fromisoformat(metadata_values["date"])
@@ -439,6 +456,7 @@ class HistoricAlignedRuns:
 
 def read_scores_csv(metadata_columns: set[str],
                     interop: Interop,
+                    configuration: Configuration,
                     has_interop_data: bool,
                     rows: Iterable[list[str]]) -> Iterator[tuple[Mapping[str, str],
                                                                  Mapping[str, str],
@@ -448,10 +466,10 @@ def read_scores_csv(metadata_columns: set[str],
     categories.sort()
 
     metadata_keys: dict[str, Optional[int]] = {item: None for item in metadata_columns}
-    product_version_keys: dict[str, Optional[int]] = {item: None for item in interop.products}
-    product_score_index = {product: i for i, product in enumerate(interop.products)}
+    product_version_keys: dict[str, Optional[int]] = {item: None for item in configuration.products}
+    product_score_index = {product: i for i, product in enumerate(configuration.products)}
     scores_by_category_keys: dict[str,
-                                  list[Optional[int]]] = {category: [None] * len(interop.products)
+                                  list[Optional[int]]] = {category: [None] * len(configuration.products)
                                                           for category in categories}
 
     if has_interop_data:
@@ -471,7 +489,7 @@ def read_scores_csv(metadata_columns: set[str],
         else:
             product, category = header.split("-", 1)
             if product != "interop":
-                if product not in interop.products:
+                if product not in configuration.products:
                     raise ValueError(f"Unknown header {header}")
                 if category == "version":
                     if product_version_keys[product] is not None:
@@ -497,7 +515,7 @@ def read_scores_csv(metadata_columns: set[str],
         if key is None:
             raise ValueError(f"Missing {product}-version field")
     for category, indexes in scores_by_category_keys.items():
-        for i, product in enumerate(interop.products):
+        for i, product in enumerate(configuration.products):
             if indexes[i] is None:
                 raise ValueError(f"Missing {product}-{category} field")
     if interop_keys is not None:
@@ -563,14 +581,14 @@ def updated_runs(old_runs: RunsByRevision, new_runs: RunsByRevision) -> Mapping[
 
 
 def score_aligned_runs(results_cache_path: str,
-                       interop: Interop,
+                       configuration: Configuration,
                        runs: RevisionRuns,
                        tests_by_category: Mapping[str, set[str]]) -> AlignedRunData:
     logger.info(f"Generating aligned results for revision {runs.revision}")
     runs_by_product = {run.browser_name: run for run in runs}
-    run_ids = [runs_by_product[product].run_id for product in interop.products]
+    run_ids = [runs_by_product[product].run_id for product in configuration.products]
     product_versions = {product: runs_by_product[product].browser_version
-                        for product in interop.products}
+                        for product in configuration.products}
 
     scores_by_category, interop_scores, _ = _wpt_interop.score_runs(results_cache_path,
                                                                     run_ids,
@@ -583,22 +601,22 @@ def score_aligned_runs(results_cache_path: str,
                           interop_scores)
 
 
-def update_channel(results_analysis_repo: ResultsAnalysisCache,
-                   metadata_repo: Metadata,
-                   interop_repo: InteropScore,
-                   interop: Interop,
-                   channel: str) -> None:
+def update_configuration(results_analysis_repo: ResultsAnalysisCache,
+                         metadata_repo: Metadata,
+                         interop_repo: InteropScore,
+                         interop: Interop,
+                         configuration: Configuration) -> None:
 
     metadata_revision, tests_by_category, _ = metadata_repo.tests_by_category(
         interop.categories(True))
 
     # Score new runs since the run of this code
-    stored_runs = interop_repo.runs(interop, channel)
+    stored_runs = interop_repo.runs(interop, configuration)
 
     run_cache = RunCache(stored_runs)
 
-    all_runs = fetch_runs(interop.products,
-                          channel,
+    all_runs = fetch_runs(configuration.products,
+                          configuration.channel,
                           aligned=False,
                           run_cache=run_cache)
 
@@ -626,10 +644,10 @@ def update_channel(results_analysis_repo: ResultsAnalysisCache,
                         category_scores = scores[category]
                         assert len(category_scores) == len(runs)
                         run_score[category] = category_scores[i]
-                    interop_repo.add_run_score(interop, channel, run, metadata_revision, run_score)
+                    interop_repo.add_run_score(interop, configuration, run, metadata_revision, run_score)
 
         # Check for newly aligned runs
-        aligned_all = interop_repo.latest_aligned(interop, channel)
+        aligned_all = interop_repo.latest_aligned(interop, configuration)
         recompute_all = True
         if aligned_all is not None:
             # Check if the interop tests changed since the previous metadata revision
@@ -641,11 +659,11 @@ def update_channel(results_analysis_repo: ResultsAnalysisCache,
             logger.info("Metadata has not changed; adding new runs")
             assert aligned_all is not None
             for revision_runs in all_runs.filter_by_revisions(set(updated.keys())):
-                if not revision_runs.is_aligned(interop.products):
+                if not revision_runs.is_aligned(configuration.products):
                     continue
                 try:
                     aligned_run_data = score_aligned_runs(results_analysis_repo.path,
-                                                          interop,
+                                                          configuration,
                                                           revision_runs,
                                                           tests_by_category)
                 except OSError as e:
@@ -661,11 +679,11 @@ def update_channel(results_analysis_repo: ResultsAnalysisCache,
             data = []
             AlignedRunsMetadata(metadata_revision)
             for revision_runs in all_runs:
-                if not revision_runs.is_aligned(interop.products):
+                if not revision_runs.is_aligned(configuration.products):
                     continue
                 try:
                     aligned_run_data = score_aligned_runs(results_analysis_repo.path,
-                                                          interop,
+                                                          configuration,
                                                           revision_runs,
                                                           tests_by_category)
                 except OSError as e:
@@ -676,14 +694,14 @@ def update_channel(results_analysis_repo: ResultsAnalysisCache,
                         continue
                 data.append(aligned_run_data)
             new_aligned = AlignedRuns(data, AlignedRunsMetadata(metadata_revision))
-        interop_repo.set_latest_aligned(interop, channel, new_aligned)
+        interop_repo.set_latest_aligned(interop, configuration, new_aligned)
 
         if new_aligned.data:
-            aligned_historic = interop_repo.historic_aligned(interop, channel)
+            aligned_historic = interop_repo.historic_aligned(interop, configuration)
             for new_aligned_run in new_aligned.data:
                 if not aligned_historic.has_revision(new_aligned_run.revision):
                     aligned_historic.append(new_aligned_run.to_historic(metadata_revision))
-            interop_repo.set_historic_aligned(interop, channel, aligned_historic)
+            interop_repo.set_historic_aligned(interop, configuration, aligned_historic)
         else:
             logger.info("Didn't find any new aligned runs")
 
@@ -744,20 +762,20 @@ def run(args: argparse.Namespace) -> None:
     for repo in [results_analysis_repo, metadata_repo, interop_repo]:
         repo.update()
 
-    for channel in ["experimental", "stable"]:
+    for configuration in interop.configurations:
         got_exception = False
         try:
-            update_channel(results_analysis_repo,
-                           metadata_repo,
-                           interop_repo,
-                           interop,
-                           channel)
+            update_configuration(results_analysis_repo,
+                                 metadata_repo,
+                                 interop_repo,
+                                 interop,
+                                 configuration)
         except Exception:
             got_exception = True
             raise
         finally:
             if not got_exception or args.commit_on_error:
-                interop_repo.commit(f"""Update interop score data for channel '{channel}'""")
+                interop_repo.commit(f"""Update interop score data for platform '{configuration.platform}' channel '{configuration.channel}'""")
 
 
 if __name__ == "__main__":
