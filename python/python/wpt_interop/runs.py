@@ -257,7 +257,10 @@ class RunCache:
     def __enter__(self) -> RunCacheData:
         if os.path.exists(self.path):
             with open(self.path) as f:
-                data = json.load(f)
+                try:
+                    data = json.load(f)
+                except json.JSONDecodeError:
+                    data = {}
         if self.data is None:
             data = {}
         self.data = RunCacheData(data)
@@ -269,5 +272,5 @@ class RunCache:
                  exc_tb: Optional[TracebackType]) -> None:
         if self.data is not None:
             with open(self.path, "w") as f:
-                json.dump(self.data, f)
+                json.dump(self.data.data, f)
             self.data = None
