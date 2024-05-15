@@ -262,14 +262,9 @@ fn interop_tests(
 ) -> PyResult<(String, TestsByCategory, TestSet)> {
     let mut tests_by_category = BTreeMap::new();
     let mut all_tests = BTreeSet::new();
-    let metadata_repo =
-        interop::metadata::MetadataRepo::new(&metadata_repo_path).map_err(Error::from)?;
-    let commit = if let Some(revision) = metadata_revision {
-        metadata_repo.get_commit(&revision).map_err(Error::from)?
-    } else {
-        metadata_repo.head().map_err(Error::from)?
-    };
-    let metadata = metadata_repo.read_metadata(&commit).map_err(Error::from)?;
+    let (commit_id, metadata) =
+        interop::metadata::load_metadata(&metadata_repo_path, metadata_revision.as_deref())
+            .map_err(Error::from)?;
     let patterns_by_label = metadata.patterns_by_label(None);
     for (category, labels) in labels_by_category.into_iter() {
         let mut tests = BTreeSet::new();
@@ -281,7 +276,9 @@ fn interop_tests(
         }
         tests_by_category.insert(category, tests);
     }
-    Ok((commit.id().to_string(), tests_by_category, all_tests))
+    Ok((commit_id.to_string(), tests_by_category, all_tests))
+}
+
 }
 
 #[pymodule]
