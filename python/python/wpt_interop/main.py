@@ -724,7 +724,7 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("--year", default=2024, type=int,
                         help="Interop year to update")
     parser.add_argument("--commit-on-error", action="store_true",
-                        help="Commit complete changes even  if there's an uncaught exception")
+                        help="Commit complete changes even if there's an uncaught exception")
     return parser
 
 
