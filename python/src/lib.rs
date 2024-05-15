@@ -1,4 +1,5 @@
 extern crate wpt_interop as interop;
+use interop::TestStatus;
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -279,6 +280,72 @@ fn interop_tests(
     Ok((commit_id.to_string(), tests_by_category, all_tests))
 }
 
+fn is_regression(prev_status: TestStatus, new_status: TestStatus) -> bool {
+    (prev_status == TestStatus::Pass || prev_status == TestStatus::Ok) && new_status != prev_status
+}
+
+fn is_subtest_regression(
+    prev_status: interop::SubtestStatus,
+    new_status: interop::SubtestStatus,
+) -> bool {
+    prev_status == interop::SubtestStatus::Pass && new_status != prev_status
+}
+
+#[pyfunction]
+fn regressions(
+    results_repo: PathBuf,
+    metadata_repo_path: PathBuf,
+    run_ids: (u64, u64),
+) -> PyResult<BTreeMap<String, (Option<String>, Vec<(String, String)>, Vec<String>)>> {
+    let results_cache: interop::results_cache::ResultsCache =
+        interop::results_cache::ResultsCache::new(&results_repo).map_err(Error::from)?;
+    let (_, metadata) =
+        interop::metadata::load_metadata(&metadata_repo_path, None).map_err(Error::from)?;
+    let base_results = results_cache
+        .results(run_ids.0, None)
+        .map_err(Error::from)?;
+    let comparison_results = results_cache
+        .results(run_ids.1, None)
+        .map_err(Error::from)?;
+
+    let mut regressed = BTreeMap::new();
+    for (test, new_results) in comparison_results.iter() {
+        if let Some(prev_results) = base_results.get(test) {
+            let test_regression = if is_regression(prev_results.status, new_results.status) {
+                Some(new_results.status.to_string())
+            } else {
+                None
+            };
+            let mut subtest_regressions = Vec::new();
+            let prev_subtest_results = BTreeMap::from_iter(
+                prev_results
+                    .subtests
+                    .iter()
+                    .map(|result| (&result.name, result.status)),
+            );
+            let test_metadata = metadata.get(&test);
+            for (subtest, new_subtest_result) in new_results
+                .subtests
+                .iter()
+                .map(|result| (&result.name, result.status))
+            {
+                if let Some(prev_subtest_result) = prev_subtest_results.get(&subtest) {
+                    if is_subtest_regression(*prev_subtest_result, new_subtest_result) {
+                        subtest_regressions.push((subtest.clone(), new_subtest_result.to_string()));
+                    }
+                }
+            }
+            if test_regression.is_some() || !subtest_regressions.is_empty() {
+                let labels = if let Some(test_metadata) = test_metadata {
+                    Vec::from_iter(test_metadata.labels.iter().cloned())
+                } else {
+                    vec![]
+                };
+                regressed.insert(test.clone(), (test_regression, subtest_regressions, labels));
+            }
+        }
+    }
+    Ok(regressed)
 }
 
 #[pymodule]
@@ -288,5 +355,6 @@ fn _wpt_interop(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_results, m)?)?;
     m.add_function(wrap_pyfunction!(score_runs, m)?)?;
     m.add_function(wrap_pyfunction!(interop_tests, m)?)?;
+    m.add_function(wrap_pyfunction!(regressions, m)?)?;
     Ok(())
 }
