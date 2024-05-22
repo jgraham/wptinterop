@@ -20,7 +20,8 @@ dependencies = [
 ]
 
 [project.scripts]
-interop-score = "wpt_interop:main.main"
+interop-score = "wpt_interop:interop_score.main"
+interop-regressions = "wpt_interop:regressions.main"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
