@@ -1,4 +1,6 @@
+import argparse
 import csv
+import logging
 import sys
 from datetime import datetime, timedelta
 
@@ -6,9 +8,49 @@ from . import _wpt_interop
 from .repo import ResultsAnalysisCache, Metadata
 from .runs import fetch_runs
 
+
+def get_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--log-level", default="info",
+                        choices=["critical", "warn" "info", "debug"],
+                        help="Logging level")
+    parser.add_argument("--pdb", action="store_true",
+                        help="Drop into pdb on exception")
+    parser.add_argument("--repo-root", default=None,
+                        help="Base path for working repos")
+    parser.add_argument("--results-analysis-cache", default=None,
+                        help="Path to results-analysis-cache repo")
+    parser.add_argument("--metadata", default=None,
+                        help="Path to metadata repo")
+    parser.add_argument("base_browser", action="store", type=str,
+                        help="Base browser product to use for comparison")
+    parser.add_argument("browser", action="store", type=str,
+                        help="Browser product to compare")
+    return parser
+
+
 def main() -> None:
-    results_analysis_repo = ResultsAnalysisCache(None, None)
-    metadata_repo = Metadata(None, None)
+    parser = get_parser()
+    args = parser.parse_args()
+    try:
+        run(args)
+    except Exception:
+        if args.pdb:
+            import traceback
+            traceback.print_exc()
+            import pdb
+            pdb.post_mortem()
+        else:
+            raise
+
+
+def run(args: argparse.Namespace) -> None:
+    logging.basicConfig(level=logging.getLevelNamesMapping()[args.log_level.upper()])
+    logging.getLogger("wpt_interop").setLevel(logging.INFO)
+
+    results_analysis_repo = ResultsAnalysisCache(args.results_analysis_cache,
+                                                 args.repo_root)
+    metadata_repo = Metadata(args.metadata, args.repo_root)
 
     for repo in [results_analysis_repo, metadata_repo]:
         repo.update()
@@ -16,7 +58,7 @@ def main() -> None:
 
     now = datetime.now()
     from_date = datetime(now.year, now.month, now.day) - timedelta(days=7)
-    browser_names = ["firefox", "firefox_android"]
+    browser_names = [args.base_browser, args.browser]
     runs = fetch_runs(browser_names, "experimental", from_date=from_date, aligned=True)
     if not runs:
         print("No aligned runs found in the last 7 days")
