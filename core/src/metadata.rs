@@ -98,6 +98,10 @@ impl Metadata {
         }
     }
 
+    pub fn get(&self, path: &str) -> Option<&PathMetadata> {
+        self.data.get(path)
+    }
+
     pub fn patterns_by_label(
         &self,
         filter_labels: Option<&BTreeSet<String>>,
@@ -192,6 +196,19 @@ impl MetadataRepo {
         }
         Ok(metadata)
     }
+}
+
+pub fn load_metadata(
+    metadata_repo_path: &Path,
+    metadata_revision: Option<&str>,
+) -> Result<(git2::Oid, Metadata)> {
+    let metadata_repo = MetadataRepo::new(metadata_repo_path)?;
+    let commit = if let Some(revision) = metadata_revision {
+        metadata_repo.get_commit(revision).map_err(Error::from)?
+    } else {
+        metadata_repo.head().map_err(Error::from)?
+    };
+    Ok((commit.id(), metadata_repo.read_metadata(&commit)?))
 }
 
 #[cfg(test)]

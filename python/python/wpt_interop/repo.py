@@ -95,8 +95,6 @@ class Repo:
 
                 self.git("checkout", self.main_branch)
                 self.git("merge", "--ff-only", f"origin/{self.main_branch}")
-            complete = self.git("log", "--oneline", "-n10")
-
 
     def clean(self) -> None:
         if self.bare:
