@@ -69,7 +69,8 @@ class Interop2024(Interop):
     year = 2024
     configurations = [Configuration("desktop", "experimental", ["chrome", "firefox", "safari"]),
                       Configuration("desktop", "stable", ["chrome", "firefox", "safari"]),
-                      Configuration("mobile", "experimental", ["chrome_android", "firefox_android"])]
+                      Configuration("mobile", "experimental",
+                                    ["chrome_android", "firefox_android"])]
 
 
 interop_by_year = cast(Mapping[int, Interop], {item.year: item() for item in [Interop2024]})
@@ -133,7 +134,9 @@ class InteropScore(Repo):
             os.makedirs(latest_dir)
         return latest_dir
 
-    def latest_aligned(self, interop: Interop, configuration: Configuration) -> Optional["AlignedRuns"]:
+    def latest_aligned(self,
+                       interop: Interop,
+                       configuration: Configuration) -> Optional["AlignedRuns"]:
         return AlignedRuns.load(self.latest_aligned_dir(interop), interop, configuration)
 
     def set_latest_aligned(self,
@@ -143,10 +146,15 @@ class InteropScore(Repo):
         updated_paths = aligned_runs.write(self.latest_aligned_dir(interop), interop, configuration)
         self.git("add", *updated_paths)
         daily = aligned_runs.filter_by_day()
-        updated_paths = daily.write(self.latest_aligned_dir(interop), interop, configuration, True)
+        updated_paths = daily.write(self.latest_aligned_dir(interop),
+                                    interop,
+                                    configuration,
+                                    True)
         self.git("add", *updated_paths)
 
-    def historic_aligned(self, interop: Interop, configuration: Configuration) -> "HistoricAlignedRuns":
+    def historic_aligned(self,
+                         interop: Interop,
+                         configuration: Configuration) -> "HistoricAlignedRuns":
         return HistoricAlignedRuns.load(self.latest_aligned_dir(interop), interop, configuration)
 
     def set_historic_aligned(self,
@@ -165,7 +173,8 @@ class RevisionData:
 
     @staticmethod
     def path(base_path: str, configuration: Configuration) -> str:
-        runs_path = os.path.join(base_path, f"runs-{platform_prefix(configuration)}{configuration.channel}.json")
+        runs_path = os.path.join(base_path,
+                                 f"runs-{platform_prefix(configuration)}{configuration.channel}.json")
         return runs_path
 
     @classmethod
@@ -309,11 +318,15 @@ class AlignedRuns:
         return self.__class__(runs, self.metadata)
 
     @staticmethod
-    def paths(base_path: str, configuration: Configuration, date_only: bool = False) -> tuple[str, str]:
+    def paths(base_path: str,
+              configuration: Configuration,
+              date_only: bool = False) -> tuple[str, str]:
 
         suffix = "-daily" if date_only else ""
-        return (os.path.join(base_path, f"{platform_prefix(configuration)}{configuration.channel}-current{suffix}.csv"),
-                os.path.join(base_path, f"{platform_prefix(configuration)}{configuration.channel}-current-metadata.json"))
+        return (os.path.join(base_path,
+                             f"{platform_prefix(configuration)}{configuration.channel}-current{suffix}.csv"),
+                os.path.join(base_path,
+                             f"{platform_prefix(configuration)}{configuration.channel}-current-metadata.json"))
 
     @classmethod
     def load(cls, base_path: str, interop: Interop, configuration: Configuration) -> Optional[Self]:
@@ -358,7 +371,9 @@ class AlignedRuns:
         return rv
 
     @staticmethod
-    def data_from_csv(interop: Interop, configuration: Configuration, rows: Iterable[list[str]]) -> list[AlignedRunData]:
+    def data_from_csv(interop: Interop,
+                      configuration: Configuration,
+                      rows: Iterable[list[str]]) -> list[AlignedRunData]:
         rv = []
         metadata_columns = {"revision", "date"}
         products = set(configuration.products)
@@ -395,7 +410,8 @@ class HistoricAlignedRuns:
 
     @staticmethod
     def path(base_path: str, configuration: Configuration, date_only: bool = False) -> str:
-        return os.path.join(base_path, f"{platform_prefix(configuration)}{configuration.channel}-historic.csv")
+        return os.path.join(base_path,
+                            f"{platform_prefix(configuration)}{configuration.channel}-historic.csv")
 
     @classmethod
     def load(cls, base_path: str, interop: Interop, configuration: Configuration) -> Self:
@@ -432,7 +448,9 @@ class HistoricAlignedRuns:
         return [data_path]
 
     @staticmethod
-    def data_from_csv(interop: Interop, configuration: Configuration, rows: Iterable[list[str]]) -> list[HistoricAlignedRunData]:
+    def data_from_csv(interop: Interop,
+                      configuration: Configuration,
+                      rows: Iterable[list[str]]) -> list[HistoricAlignedRunData]:
         rv = []
         metadata_columns = {"revision", "metadata-revision", "date"}
         for (metadata_values,
@@ -469,8 +487,10 @@ def read_scores_csv(metadata_columns: set[str],
     product_version_keys: dict[str, Optional[int]] = {item: None for item in configuration.products}
     product_score_index = {product: i for i, product in enumerate(configuration.products)}
     scores_by_category_keys: dict[str,
-                                  list[Optional[int]]] = {category: [None] * len(configuration.products)
-                                                          for category in categories}
+                                  list[Optional[int]]] = {
+                                      category: [None] * len(configuration.products)
+                                      for category in categories
+                                  }
 
     if has_interop_data:
         interop_keys: Optional[dict[str, Optional[int]]] = {category: None
@@ -644,7 +664,11 @@ def update_configuration(results_analysis_repo: ResultsAnalysisCache,
                         category_scores = scores[category]
                         assert len(category_scores) == len(runs)
                         run_score[category] = category_scores[i]
-                    interop_repo.add_run_score(interop, configuration, run, metadata_revision, run_score)
+                    interop_repo.add_run_score(interop,
+                                               configuration,
+                                               run,
+                                               metadata_revision,
+                                               run_score)
 
         # Check for newly aligned runs
         aligned_all = interop_repo.latest_aligned(interop, configuration)
@@ -775,7 +799,9 @@ def run(args: argparse.Namespace) -> None:
             raise
         finally:
             if not got_exception or args.commit_on_error:
-                interop_repo.commit(f"""Update interop score data for platform '{configuration.platform}' channel '{configuration.channel}'""")
+                msg = (f"Update interop score data for platform '{configuration.platform}' "
+                       f"channel '{configuration.channel}'")
+                interop_repo.commit(msg)
 
 
 if __name__ == "__main__":
