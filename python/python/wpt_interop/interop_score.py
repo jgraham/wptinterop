@@ -28,17 +28,19 @@ class Configuration:
 class Interop:
     year: int
     configurations: list[Configuration]
+    end_date: datetime
     _category_data: Optional[Mapping[str, Mapping[str, Any]]] = None
     _interop_data: Optional[Mapping[str, Mapping[str, Any]]] = None
 
-    def __init__(self) -> None:
+    def __init__(self, wpt_fyi: Optional[str]=None) -> None:
+        self.wpt_fyi = wpt_fyi
         self._categories: Optional[Mapping[str, set[str]]] = None
 
     def _ensure_data(self) -> None:
         if Interop._category_data is None:
-            Interop._category_data = metadata.fetch_category_data()
+            Interop._category_data = metadata.fetch_category_data(self.wpt_fyi)
         if Interop._interop_data is None:
-            Interop._interop_data = metadata.fetch_interop_data()
+            Interop._interop_data = metadata.fetch_interop_data(self.wpt_fyi)
 
     def categories(self, only_active: bool = True) -> Mapping[str, set[str]]:
         if self._categories is None:
@@ -61,19 +63,32 @@ class Interop:
 
 class Interop2023(Interop):
     year = 2023
+    end_date = datetime(2024, 2, 1)
     configurations = [Configuration("desktop", "nightly", ["chrome", "firefox", "safari"]),
                       Configuration("desktop", "stable", ["chrome", "firefox", "safari"])]
 
 
 class Interop2024(Interop):
     year = 2024
+    end_date = datetime(2025, 2, 6)
     configurations = [Configuration("desktop", "experimental", ["chrome", "firefox", "safari"]),
                       Configuration("desktop", "stable", ["chrome", "firefox", "safari"]),
                       Configuration("mobile", "experimental",
                                     ["chrome_android", "firefox_android"])]
 
 
-interop_by_year = cast(Mapping[int, Interop], {item.year: item() for item in [Interop2024]})
+class Interop2025(Interop):
+    year = 2025
+    end_date = datetime(2026, 2, 5)
+    configurations = [Configuration("desktop", "experimental", ["chrome", "firefox", "safari"]),
+                      Configuration("desktop", "beta", ["chrome", "firefox"]),
+                      Configuration("desktop", "stable", ["chrome", "firefox", "safari"]),
+                      Configuration("mobile", "experimental",
+                                    ["chrome_android", "firefox_android"])]
+
+
+all_interops = [Interop2023, Interop2024, Interop2025]
+interop_cls_by_year = cast(Mapping[int, type[Interop]], {item.year: item for item in all_interops})
 
 
 def platform_prefix(configuration: Configuration) -> str:
@@ -730,6 +745,15 @@ def update_configuration(results_analysis_repo: ResultsAnalysisCache,
             logger.info("Didn't find any new aligned runs")
 
 
+def get_default_years() -> list[int]:
+    years = []
+    now = datetime.now()
+    for year, interop in interop_cls_by_year.items():
+        if now.date() <= interop.end_date.date():
+            years.append(year)
+    return years
+
+
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--log-level", default="info",
@@ -745,8 +769,10 @@ def get_parser() -> argparse.ArgumentParser:
                         help="Path to metadata repo")
     parser.add_argument("--interop-score", default=None,
                         help="Path to output interop-score repo")
-    parser.add_argument("--year", default=2024, type=int,
+    parser.add_argument("--year", dest="years", action="append", type=int,
                         help="Interop year to update")
+    parser.add_argument("--wpt-fyi",
+                        help="Base URL to use for wpt.fyi")
     parser.add_argument("--commit-on-error", action="store_true",
                         help="Commit complete changes even if there's an uncaught exception")
     return parser
@@ -776,32 +802,35 @@ def run(args: argparse.Namespace) -> None:
     metadata_repo = Metadata(args.metadata, args.repo_root)
     interop_repo = InteropScore(args.interop_score, args.repo_root)
 
-    try:
-        interop: Interop = interop_by_year[args.year]
-    except KeyError:
-        raise argparse.ArgumentError(None, message=f"No suvh year {args.year}")
+    years = args.years if args.years is not None else get_default_years()
 
-    interop_repo.clean()
-
-    for repo in [results_analysis_repo, metadata_repo, interop_repo]:
-        repo.update()
-
-    for configuration in interop.configurations:
-        got_exception = False
+    for year in years:
         try:
-            update_configuration(results_analysis_repo,
-                                 metadata_repo,
-                                 interop_repo,
-                                 interop,
-                                 configuration)
-        except Exception:
-            got_exception = True
-            raise
-        finally:
-            if not got_exception or args.commit_on_error:
-                msg = (f"Update interop score data for platform '{configuration.platform}' "
-                       f"channel '{configuration.channel}'")
-                interop_repo.commit(msg)
+            interop: Interop = interop_cls_by_year[year](args.wpt_fyi)
+        except KeyError:
+            raise argparse.ArgumentError(None, message=f"No such year {year}")
+
+        interop_repo.clean()
+
+        for repo in [results_analysis_repo, metadata_repo, interop_repo]:
+            repo.update()
+
+        for configuration in interop.configurations:
+            got_exception = False
+            try:
+                update_configuration(results_analysis_repo,
+                                     metadata_repo,
+                                     interop_repo,
+                                     interop,
+                                     configuration)
+            except Exception:
+                got_exception = True
+                raise
+            finally:
+                if not got_exception or args.commit_on_error:
+                    msg = (f"Update interop score data for platform '{configuration.platform}' "
+                           f"channel '{configuration.channel}'")
+                    interop_repo.commit(msg)
 
 
 if __name__ == "__main__":

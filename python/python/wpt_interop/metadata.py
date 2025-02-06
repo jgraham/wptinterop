@@ -1,21 +1,25 @@
 from collections import defaultdict
 from functools import cache
 from typing import Any, Callable, Mapping, Optional, Set, Tuple
+from urllib.parse import urljoin
 
 import requests
 
+DEFAULT_WPT_FYI = "https://wpt.fyi/"
 CATEGORY_URL = ("https://raw.githubusercontent.com/web-platform-tests/"
                 "results-analysis/main/interop-scoring/category-data.json")
-INTEROP_DATA_URL = "https://wpt.fyi/static/interop-data.json"
-METADATA_URL = "https://wpt.fyi/api/metadata?includeTestLevel=true&product=chrome"
+INTEROP_DATA_URL = "/static/interop-data.json"
+METADATA_URL = "/api/metadata?includeTestLevel=true&product=chrome"
 
 
-def fetch_category_data() -> Mapping[str, Mapping[str, Any]]:
-    return requests.get(CATEGORY_URL).json()
+def fetch_category_data(wpt_fyi: Optional[str]=None) -> Mapping[str, Mapping[str, Any]]:
+    url = urljoin(wpt_fyi if wpt_fyi is not None else DEFAULT_WPT_FYI, CATEGORY_URL)
+    return requests.get(url).json()
 
 
-def fetch_interop_data() -> Mapping[str, Mapping[str, Any]]:
-    return requests.get(INTEROP_DATA_URL).json()
+def fetch_interop_data(wpt_fyi: Optional[str]=None) -> Mapping[str, Mapping[str, Any]]:
+    url = urljoin(wpt_fyi if wpt_fyi is not None else DEFAULT_WPT_FYI, INTEROP_DATA_URL)
+    return requests.get(url).json()
 
 
 def fetch_labelled_tests() -> Mapping[str, set]:
