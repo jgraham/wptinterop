@@ -2,7 +2,6 @@ extern crate wpt_interop as interop;
 use interop::TestStatus;
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fmt;
@@ -29,48 +28,11 @@ impl std::convert::From<Error> for PyErr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, FromPyObject, IntoPyObject)]
 struct Results {
     status: String,
     subtests: Vec<SubtestResult>,
     expected: Option<String>,
-}
-
-impl<'source> FromPyObject<'source> for Results {
-    // Required method
-    fn extract(ob: &'source PyAny) -> PyResult<Results> {
-        // Check we get a dictionary
-        ob.downcast::<PyDict>()?;
-        let status = ob.get_item("status")?.extract()?;
-        let subtests = ob.get_item("subtests")?.extract()?;
-        let expected = if ob.contains("expected")? {
-            Some(ob.get_item("expected")?.extract()?)
-        } else {
-            None
-        };
-        Ok(Results {
-            status,
-            subtests,
-            expected,
-        })
-    }
-}
-
-impl IntoPy<PyObject> for Results {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        let rv = pyo3::types::PyDict::new(py);
-        rv.set_item("status", self.status)
-            .expect("Failed to set status");
-        rv.set_item(
-            "subtests",
-            self.subtests
-                .into_iter()
-                .map(|x| x.into_py(py))
-                .collect::<Vec<_>>(),
-        )
-        .expect("Failed to set subtests");
-        rv.into_py(py)
-    }
 }
 
 impl TryFrom<Results> for interop::Results {
@@ -106,45 +68,11 @@ impl From<interop::Results> for Results {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, FromPyObject, IntoPyObject)]
 struct SubtestResult {
     name: String,
     status: String,
     expected: Option<String>,
-}
-
-impl<'source> FromPyObject<'source> for SubtestResult {
-    // Required method
-    fn extract(ob: &'source PyAny) -> PyResult<SubtestResult> {
-        // Check we get a dictionary
-        ob.downcast::<PyDict>()?;
-        let name = ob.get_item("name")?.extract()?;
-        let status = ob.get_item("status")?.extract()?;
-        let expected = if ob.contains("expected")? {
-            Some(ob.get_item("expected")?.extract()?)
-        } else {
-            None
-        };
-        Ok(SubtestResult {
-            name,
-            status,
-            expected,
-        })
-    }
-}
-
-impl IntoPy<PyObject> for SubtestResult {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        let rv = pyo3::types::PyDict::new(py);
-        rv.set_item("name", self.name).expect("Failed to set id");
-        rv.set_item("status", self.status)
-            .expect("Failed to set subtest status");
-        if self.expected.is_some() {
-            rv.set_item("expected", self.expected)
-                .expect("Failed to set subtest expected");
-        }
-        rv.into_py(py)
-    }
 }
 
 impl TryFrom<&SubtestResult> for interop::SubtestResult {
@@ -256,6 +184,7 @@ type TestSet = BTreeSet<String>;
 type TestsByCategory = BTreeMap<String, TestSet>;
 
 #[pyfunction]
+#[pyo3(signature = (metadata_repo_path, labels_by_category, metadata_revision=None))]
 fn interop_tests(
     metadata_repo_path: PathBuf,
     labels_by_category: BTreeMap<String, BTreeSet<String>>,
@@ -354,7 +283,7 @@ fn regressions(
 
 #[pymodule]
 #[pyo3(name = "_wpt_interop")]
-fn _wpt_interop(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _wpt_interop(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interop_score, m)?)?;
     m.add_function(wrap_pyfunction!(run_results, m)?)?;
     m.add_function(wrap_pyfunction!(score_runs, m)?)?;
