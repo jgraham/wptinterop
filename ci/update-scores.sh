@@ -8,8 +8,7 @@ cd "$SCRIPT_DIR"/..
 git config --global user.email "interop-scores-bot@users.noreply.github.com"
 git config --global user.name "interop-scores-bot"
 
-pip install -e python/
-interop-score --repo-root repos --log-level debug
+uv run --project python interop-score --repo-root repos --log-level debug https://interop-2025-mock-dot-wptdashboard-staging.uk.r.appspot.com/interop-2025 --repo-root repos
 cd repos/interop-scores
 git status
 git log
