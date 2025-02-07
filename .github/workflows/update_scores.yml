@@ -1,6 +1,8 @@
 name: Update interop-scores
 on:
   push:
+    branches:
+      - main
   # Trigger every three hours, or manually.
   schedule:
     - cron: '20 */3 * * *'
