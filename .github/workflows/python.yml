@@ -41,6 +41,11 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
+          before-script-linux: |
+            if command -v yum &> /dev/null
+            then
+              yum install -y openssl openssl-devel perl perl-IPC-Cmd
+            fi
           args: --release --out dist --find-interpreter -m python/Cargo.toml
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: auto
@@ -142,7 +147,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          args: --out dist
+          args: --out dist -m python/Cargo.toml
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
