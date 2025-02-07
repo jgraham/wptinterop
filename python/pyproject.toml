@@ -19,6 +19,15 @@ dependencies = [
   "requests==2.31.0"
 ]
 
+
+[project.optional-dependencies]
+test = [
+  "mypy==1.10.0",
+  "ruff==0.4.8",
+  "types-requests==2.32.0.20240712",
+]
+
+
 [project.scripts]
 interop-score = "wpt_interop:interop_score.main"
 interop-regressions = "wpt_interop:regressions.main"
