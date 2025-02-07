@@ -291,12 +291,16 @@ fn is_subtest_regression(
     prev_status == interop::SubtestStatus::Pass && new_status != prev_status
 }
 
+type TestRegression = Option<String>;
+type SubtestRegression = Vec<(String, String)>;
+type Labels = Vec<String>;
+
 #[pyfunction]
 fn regressions(
     results_repo: PathBuf,
     metadata_repo_path: PathBuf,
     run_ids: (u64, u64),
-) -> PyResult<BTreeMap<String, (Option<String>, Vec<(String, String)>, Vec<String>)>> {
+) -> PyResult<BTreeMap<String, (TestRegression, SubtestRegression, Labels)>> {
     let results_cache: interop::results_cache::ResultsCache =
         interop::results_cache::ResultsCache::new(&results_repo).map_err(Error::from)?;
     let (_, metadata) =
@@ -323,7 +327,7 @@ fn regressions(
                     .iter()
                     .map(|result| (&result.name, result.status)),
             );
-            let test_metadata = metadata.get(&test);
+            let test_metadata = metadata.get(test);
             for (subtest, new_subtest_result) in new_results
                 .subtests
                 .iter()
