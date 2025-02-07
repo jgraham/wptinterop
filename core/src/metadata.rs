@@ -8,42 +8,42 @@ use std::path::Path;
 use crate::TestStatus;
 
 #[derive(Debug, Deserialize)]
-struct MetadataFile {
+pub struct MetadataFile {
     links: Vec<MetadataEntry>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-enum MetadataEntry {
+pub enum MetadataEntry {
     Label(MetadataLabelEntry),
     Link(MetadataLinkEntry),
 }
 
 #[derive(Debug, Deserialize)]
-struct MetadataLabelEntry {
-    label: String,
-    url: Option<String>,
-    results: Vec<MetadataLabelResult>,
+pub struct MetadataLabelEntry {
+    pub label: String,
+    pub url: Option<String>,
+    pub results: Vec<MetadataLabelResult>,
 }
 
 #[derive(Debug, Deserialize)]
-struct MetadataLinkEntry {
-    url: String,
-    product: Option<String>,
-    results: Vec<MetadataLinkResult>,
+pub struct MetadataLinkEntry {
+    pub url: String,
+    pub product: Option<String>,
+    pub results: Vec<MetadataLinkResult>,
 }
 
 #[derive(Debug, Deserialize)]
-struct MetadataLabelResult {
-    test: String,
-    status: Option<TestStatus>,
+pub struct MetadataLabelResult {
+    pub test: String,
+    pub status: Option<TestStatus>,
 }
 
 #[derive(Debug, Deserialize)]
-struct MetadataLinkResult {
-    test: String,
-    subtest: Option<String>,
-    status: Option<TestStatus>,
+pub struct MetadataLinkResult {
+    pub test: String,
+    pub subtest: Option<String>,
+    pub status: Option<TestStatus>,
 }
 
 #[derive(Debug)]
@@ -53,7 +53,7 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    fn new(revision: String) -> Metadata {
+    pub fn new(revision: String) -> Metadata {
         Metadata {
             revision,
             data: BTreeMap::new(),
