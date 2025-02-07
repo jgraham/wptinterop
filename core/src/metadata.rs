@@ -210,15 +210,3 @@ pub fn load_metadata(
     };
     Ok((commit.id(), metadata_repo.read_metadata(&commit)?))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-    #[test]
-    fn test_parse_metadata() {
-        let repo = MetadataRepo::new(&PathBuf::from("/home/jgraham/develop/wpt-metadata")).unwrap();
-        let metadata = repo.read_metadata(&repo.head().unwrap()).unwrap();
-        println!("{:?}", metadata);
-    }
-}
