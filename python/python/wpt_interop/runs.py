@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 
 import requests
 
-RUNS_URL = 'https://wpt.fyi/api/runs'
+RUNS_URL = "https://wpt.fyi/api/runs"
 
 RunsByDate = Mapping[str, list["RevisionRuns"]]
 
@@ -16,19 +16,22 @@ logger = logging.getLogger("wpt_interop.runs")
 
 
 class Run:
-    def __init__(self, run_id: int,
-                 browser_name: str,
-                 browser_version: str,
-                 os_name: str,
-                 os_version: str,
-                 revision: str,
-                 full_revision_hash: str,
-                 results_url: str,
-                 created_at: datetime,
-                 time_start: datetime,
-                 time_end: datetime,
-                 raw_results_url: str,
-                 labels: list[str]):
+    def __init__(
+        self,
+        run_id: int,
+        browser_name: str,
+        browser_version: str,
+        os_name: str,
+        os_version: str,
+        revision: str,
+        full_revision_hash: str,
+        results_url: str,
+        created_at: datetime,
+        time_start: datetime,
+        time_end: datetime,
+        raw_results_url: str,
+        labels: list[str],
+    ):
         self.run_id = run_id
         self.browser_name = browser_name
         self.browser_version = browser_version
@@ -45,19 +48,21 @@ class Run:
 
     @classmethod
     def from_json(cls, data: Mapping[str, Any]) -> "Run":
-        return cls(data["id"],
-                   data["browser_name"],
-                   data["browser_version"],
-                   data["os_name"],
-                   data["os_version"],
-                   data["revision"],
-                   data["full_revision_hash"],
-                   data["results_url"],
-                   datetime.fromisoformat(data["created_at"]),
-                   datetime.fromisoformat(data["time_start"]),
-                   datetime.fromisoformat(data["time_end"]),
-                   data["raw_results_url"],
-                   data["labels"])
+        return cls(
+            data["id"],
+            data["browser_name"],
+            data["browser_version"],
+            data["os_name"],
+            data["os_version"],
+            data["revision"],
+            data["full_revision_hash"],
+            data["results_url"],
+            datetime.fromisoformat(data["created_at"]),
+            datetime.fromisoformat(data["time_start"]),
+            datetime.fromisoformat(data["time_end"]),
+            data["raw_results_url"],
+            data["labels"],
+        )
 
     def to_json(self) -> Mapping[str, Union[str, int, list[str]]]:
         return {
@@ -73,7 +78,7 @@ class Run:
             "time_start": self.time_start.isoformat(),
             "time_end": self.time_end.isoformat(),
             "raw_results_url": self.raw_results_url,
-            "labels": self.labels
+            "labels": self.labels,
         }
 
 
@@ -144,15 +149,15 @@ def group_by_date(runs_by_revision: RunsByRevision) -> RunsByDate:
     return runs_by_date
 
 
-def fetch_runs(products: list[str],
-               channel: str,
-               from_date: Optional[datetime] = None,
-               to_date: Optional[datetime] = None,
-               aligned: bool = True,
-               max_per_day: Optional[int] = None,
-               run_cache: Optional[ContextManager["RunCacheData"]] = None
-               ) -> RunsByRevision:
-
+def fetch_runs(
+    products: list[str],
+    channel: str,
+    from_date: Optional[datetime] = None,
+    to_date: Optional[datetime] = None,
+    aligned: bool = True,
+    max_per_day: Optional[int] = None,
+    run_cache: Optional[ContextManager["RunCacheData"]] = None,
+) -> RunsByRevision:
     """Fetch all the runs for a given date range.
 
     Runs are only fetched if they aren't found (keyed by date) in the run_cache."""
@@ -194,10 +199,9 @@ def fetch_runs(products: list[str],
                 logger.debug(f"Using cached data for {fetch_date.strftime('%Y-%m-%d')}")
                 day_runs = cache[fetch_date]
             else:
-                date_query = urlencode({
-                    "from": fetch_date.strftime("%Y-%m-%d"),
-                    "to": next_date.strftime("%Y-%m-%d")
-                })
+                date_query = urlencode(
+                    {"from": fetch_date.strftime("%Y-%m-%d"), "to": next_date.strftime("%Y-%m-%d")}
+                )
                 date_url = f"{url}&{date_query}"
                 logger.info(f"Fetching runs from {date_url}")
                 day_runs = requests.get(date_url).json()
@@ -229,6 +233,7 @@ def group_by_revision(runs: list[Mapping[str, Any]]) -> Mapping[str, list[Run]]:
 
 class RunCacheData:
     """Run cache that stores a map of {date: [Run as JSON]}, matching the fetch_runs endpoint"""
+
     def __init__(self, data: MutableMapping[str, Any]):
         self.data = data
 
@@ -243,15 +248,19 @@ class RunCacheData:
 
 
 class RunCache:
-    def __init__(self,
-                 products: list[str],
-                 channel: str,
-                 aligned: bool = True,
-                 max_per_day: Optional[int] = None):
+    def __init__(
+        self,
+        products: list[str],
+        channel: str,
+        aligned: bool = True,
+        max_per_day: Optional[int] = None,
+    ):
         products_str = "-".join(products)
 
-        self.path = (f"products:{products_str}-channel:{channel}-"
-                     f"aligned:{aligned}-max_per_day:{max_per_day}.json")
+        self.path = (
+            f"products:{products_str}-channel:{channel}-"
+            f"aligned:{aligned}-max_per_day:{max_per_day}.json"
+        )
         self.data: Optional[RunCacheData] = None
 
     def __enter__(self) -> RunCacheData:
@@ -266,10 +275,12 @@ class RunCache:
         self.data = RunCacheData(data)
         return self.data
 
-    def __exit__(self,
-                 exc_type: Optional[type[BaseException]],
-                 exc_val: Optional[BaseException],
-                 exc_tb: Optional[TracebackType]) -> None:
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         if self.data is not None:
             with open(self.path, "w") as f:
                 json.dump(self.data.data, f)

@@ -14,8 +14,7 @@ from .metadata import get_category_data
 
 logger = logging.getLogger("wpt_interop.score")
 
-DEFAULT_RESULTS_CACHE_PATH = os.path.join(os.path.abspath(os.curdir),
-                                          "results-analysis-cache.git")
+DEFAULT_RESULTS_CACHE_PATH = os.path.join(os.path.abspath(os.curdir), "results-analysis-cache.git")
 
 RunScores = Mapping[str, list[int]]
 InteropScore = Mapping[str, int]
@@ -44,17 +43,16 @@ def load_wptreport(path: str) -> Mapping[str, Any]:
     for item in data["results"]:
         result = {"status": item["status"], "subtests": []}
         for subtest in item["subtests"]:
-            result["subtests"].append(
-                {"name": subtest["name"], "status": subtest["status"]}
-            )
+            result["subtests"].append({"name": subtest["name"], "status": subtest["status"]})
         rv[item["test"]] = result
     return rv
 
 
-def load_taskcluster_results(log_paths: Iterable[str],
-                             all_tests: set[str],
-                             expected_failures: Mapping[str,
-                                                        set[Optional[str]]]) -> Mapping[str, Any]:
+def load_taskcluster_results(
+    log_paths: Iterable[str],
+    all_tests: set[str],
+    expected_failures: Mapping[str, set[Optional[str]]],
+) -> Mapping[str, Any]:
     run_results = {}
     for path in log_paths:
         log_results = load_wptreport(path)
@@ -77,9 +75,9 @@ def load_taskcluster_results(log_paths: Iterable[str],
     return run_results
 
 
-def date_range(year: int,
-               from_date: Optional[datetime] = None,
-               to_date: Optional[datetime] = None) -> tuple[datetime, datetime]:
+def date_range(
+    year: int, from_date: Optional[datetime] = None, to_date: Optional[datetime] = None
+) -> tuple[datetime, datetime]:
     now = datetime.now()
     if from_date is None:
         from_date = datetime(year, 1, 1)
@@ -99,14 +97,17 @@ def update_results_cache(path: str) -> None:
     if not os.path.exists(path):
         os.makedirs(path)
         subprocess.run(["git", "init", "--bare"], cwd=path)
-    subprocess.run(["git", "fetch", "--tags",
-                    "https://github.com/web-platform-tests/results-analysis-cache"], cwd=path)
+    subprocess.run(
+        ["git", "fetch", "--tags", "https://github.com/web-platform-tests/results-analysis-cache"],
+        cwd=path,
+    )
 
 
-def score_runs_by_date(runs_by_date: RunsByDate,
-                       tests_by_category: Mapping[str, set[str]],
-                       results_cache_path: str = DEFAULT_RESULTS_CACHE_PATH
-                       ) -> Mapping[str, Mapping[str, Mapping[str, Any]]]:
+def score_runs_by_date(
+    runs_by_date: RunsByDate,
+    tests_by_category: Mapping[str, set[str]],
+    results_cache_path: str = DEFAULT_RESULTS_CACHE_PATH,
+) -> Mapping[str, Mapping[str, Mapping[str, Any]]]:
     results_by_date: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
 
     for date, date_runs in runs_by_date.items():
@@ -119,13 +120,13 @@ def score_runs_by_date(runs_by_date: RunsByDate,
             run_ids = [item.run_id for item in revision_runs.runs]
 
             try:
-                browser_scores, interop_scores, _ = _wpt_interop.score_runs(results_cache_path,
-                                                                            run_ids,
-                                                                            tests_by_category,
-                                                                            set())
+                browser_scores, interop_scores, _ = _wpt_interop.score_runs(
+                    results_cache_path, run_ids, tests_by_category, set()
+                )
             except Exception:
-                logger.warning("Failed to compute score for run ids "
-                               f"{' '.join(str(item) for item in run_ids)}")
+                logger.warning(
+                    f"Failed to compute score for run ids {' '.join(str(item) for item in run_ids)}"
+                )
             for i, run in enumerate(revision_runs.runs):
                 run_score: dict[str, Any] = {}
                 for category in browser_scores.keys():
@@ -162,9 +163,9 @@ def score_wptreports(
         runs_results.append(load_taskcluster_results(log_paths, all_tests, expected_failures))
 
     expected_failure_scores: Optional[Mapping[str, list[tuple[int, int]]]]
-    run_scores, _, expected_failure_scores = _wpt_interop.interop_score(runs_results,
-                                                                        tests_by_category,
-                                                                        set())
+    run_scores, _, expected_failure_scores = _wpt_interop.interop_score(
+        runs_results, tests_by_category, set()
+    )
 
     if not include_expected_failures:
         # Otherwise this will just be all zeros
@@ -173,13 +174,12 @@ def score_wptreports(
     return run_scores, expected_failure_scores
 
 
-def score_runs(year: int,
-               run_ids: Iterable[int],
-               results_cache_path: str = DEFAULT_RESULTS_CACHE_PATH,
-               category_filter: Optional[Callable[[str], bool]] = None
-               ) -> tuple[RunScores,
-                          InteropScore,
-                          ExpectedFailureScores]:
+def score_runs(
+    year: int,
+    run_ids: Iterable[int],
+    results_cache_path: str = DEFAULT_RESULTS_CACHE_PATH,
+    category_filter: Optional[Callable[[str], bool]] = None,
+) -> tuple[RunScores, InteropScore, ExpectedFailureScores]:
     tests_by_category, all_tests = get_category_data(year, category_filter=category_filter)
 
     update_results_cache(results_cache_path)
@@ -187,13 +187,14 @@ def score_runs(year: int,
     return _wpt_interop.score_runs(results_cache_path, list(run_ids), tests_by_category, set())
 
 
-def score_all_runs(year: int,
-                   only_active: bool = True,
-                   results_cache_path: str = DEFAULT_RESULTS_CACHE_PATH,
-                   products: Optional[list[str]] = None,
-                   experimental: bool = True,
-                   from_date: Optional[datetime] = None
-                   ) -> Mapping[str, Mapping[str, Mapping[str, Any]]]:
+def score_all_runs(
+    year: int,
+    only_active: bool = True,
+    results_cache_path: str = DEFAULT_RESULTS_CACHE_PATH,
+    products: Optional[list[str]] = None,
+    experimental: bool = True,
+    from_date: Optional[datetime] = None,
+) -> Mapping[str, Mapping[str, Mapping[str, Any]]]:
     if products is None:
         products = ["chrome", "edge", "firefox", "safari"]
 
@@ -202,23 +203,23 @@ def score_all_runs(year: int,
     update_results_cache(results_cache_path)
 
     from_date, to_date = date_range(year, from_date=from_date)
-    runs_by_revision = fetch_runs(products,
-                                  "experimental" if experimental else "stable",
-                                  from_date,
-                                  to_date,
-                                  aligned=False)
+    runs_by_revision = fetch_runs(
+        products, "experimental" if experimental else "stable", from_date, to_date, aligned=False
+    )
 
-    return score_runs_by_date(group_by_date(runs_by_revision),
-                              tests_by_category,
-                              results_cache_path)
+    return score_runs_by_date(
+        group_by_date(runs_by_revision), tests_by_category, results_cache_path
+    )
 
 
-def score_aligned_runs(year: int,
-                       only_active: bool = True,
-                       results_cache_path: str = DEFAULT_RESULTS_CACHE_PATH,
-                       products: Optional[list[str]] = None,
-                       experimental: bool = True,
-                       max_per_day: int = 1) -> Mapping[str, Mapping[str, Mapping[str, Any]]]:
+def score_aligned_runs(
+    year: int,
+    only_active: bool = True,
+    results_cache_path: str = DEFAULT_RESULTS_CACHE_PATH,
+    products: Optional[list[str]] = None,
+    experimental: bool = True,
+    max_per_day: int = 1,
+) -> Mapping[str, Mapping[str, Mapping[str, Any]]]:
     if products is None:
         products = ["chrome", "edge", "firefox", "safari"]
 
@@ -227,21 +228,25 @@ def score_aligned_runs(year: int,
     update_results_cache(results_cache_path)
 
     from_date, to_date = date_range(year)
-    runs_by_revision = fetch_runs(products,
-                                  "experimental" if experimental else "stable",
-                                  from_date,
-                                  to_date,
-                                  aligned=True,
-                                  max_per_day=max_per_day)
+    runs_by_revision = fetch_runs(
+        products,
+        "experimental" if experimental else "stable",
+        from_date,
+        to_date,
+        aligned=True,
+        max_per_day=max_per_day,
+    )
 
-    return score_runs_by_date(group_by_date(runs_by_revision),
-                              tests_by_category,
-                              results_cache_path)
+    return score_runs_by_date(
+        group_by_date(runs_by_revision), tests_by_category, results_cache_path
+    )
 
 
-def write_per_date_csv(year: int,
-                       results_cache_path: str = DEFAULT_RESULTS_CACHE_PATH,
-                       products: Optional[list[str]] = None) -> None:
+def write_per_date_csv(
+    year: int,
+    results_cache_path: str = DEFAULT_RESULTS_CACHE_PATH,
+    products: Optional[list[str]] = None,
+) -> None:
     if products is None:
         products = ["chrome", "edge", "firefox", "safari"]
 
@@ -254,9 +259,7 @@ def write_per_date_csv(year: int,
 
     from_date, to_date = date_range(year)
 
-    for experimental, label in [(True, "experimental"),
-                                (False, "stable")]:
-
+    for experimental, label in [(True, "experimental"), (False, "stable")]:
         filename = f"interop-{year}-{label}-v2.csv"
         with open(filename, "w") as f:
             writer = csv.writer(f)
@@ -270,15 +273,17 @@ def write_per_date_csv(year: int,
 
             writer.writerow(headers)
 
-            runs_by_revision = fetch_runs(products,
-                                          "experimental" if experimental else "stable",
-                                          from_date,
-                                          to_date,
-                                          aligned=True,
-                                          max_per_day=1)
-            results_by_date = score_runs_by_date(group_by_date(runs_by_revision),
-                                                 tests_by_category,
-                                                 results_cache_path)
+            runs_by_revision = fetch_runs(
+                products,
+                "experimental" if experimental else "stable",
+                from_date,
+                to_date,
+                aligned=True,
+                max_per_day=1,
+            )
+            results_by_date = score_runs_by_date(
+                group_by_date(runs_by_revision), tests_by_category, results_cache_path
+            )
 
             for date, revision_data in sorted(results_by_date.items(), key=lambda item: item[0]):
                 # We expect to select a single revision per day

@@ -138,10 +138,7 @@ class Metadata(Repo):
         super().__init__(path, repo_root)
         self._tests = None
 
-    def tests_by_category(self,
-                          labels_by_category: Mapping[str, set[str]],
-                          metadata_revision: Optional[str] = None) -> tuple[
-                              str, Mapping[str, set[str]], set[str]]:
-        return _wpt_interop.interop_tests(self.path,
-                                          labels_by_category,
-                                          metadata_revision)
+    def tests_by_category(
+        self, labels_by_category: Mapping[str, set[str]], metadata_revision: Optional[str] = None
+    ) -> tuple[str, Mapping[str, set[str]], set[str]]:
+        return _wpt_interop.interop_tests(self.path, labels_by_category, metadata_revision)
