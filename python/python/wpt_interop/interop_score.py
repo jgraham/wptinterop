@@ -683,7 +683,12 @@ def update_configuration(
     run_cache = RunCache(stored_runs)
 
     all_runs = fetch_runs(
-        configuration.products, configuration.channel, aligned=False, run_cache=run_cache
+        configuration.products,
+        configuration.channel,
+        aligned=False,
+        run_cache=run_cache,
+        from_date=datetime(interop.year, 1, 1),
+        to_date=min(interop.end_date, datetime.now()),
     )
 
     updated = updated_runs(stored_runs, all_runs)
